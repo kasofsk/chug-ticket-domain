@@ -895,7 +895,22 @@ module ticket_tests {
       .then(reportEvaluatorResult(1, 1012, 1))
       .then(reportEvaluatorResult(1, 1021, 1))
       .then(reportFinalization(1, FinalizationResultUnavailable(1031)))
+      .then(check(graph.tickets.get(1).workCyclesStarted == 1
+        and match lastDecision {
+          | TicketDecided(success) => success.obligations == []
+          | _ => false
+        }))
       .then(submit(ResumeTicket(1)))
+      .then(check(graph.tickets.get(1).workCyclesStarted == 1
+        and match lastDecision {
+          | TicketDecided(success) => success.obligations.length() == 1
+            and (match success.obligations.nth(0) {
+              | FinalizeTicket(request) => request.finalization.input == 1001
+                and request.finalization.source == source(1, 1001)
+              | _ => false
+            })
+          | _ => false
+        }))
       .then(check(match graph.tickets.get(1).state {
         | Finalization(operation) =>
             operation.workCycle == 1 and operation.generation == 2

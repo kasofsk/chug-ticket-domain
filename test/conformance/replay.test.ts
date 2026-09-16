@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { basename } from "node:path";
 import * as k from "../../src/ticket.js";
 import { equal } from "../../src/task.js";
-import * as itf from "./itf.js";
+import * as itf from "../../src/itf.js";
 import * as replay from "./replay.js";
 const traces = itf.load_traces();
 const summaries: {

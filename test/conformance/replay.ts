@@ -1,7 +1,7 @@
 import * as t from "../../src/task.js";
 import * as k from "../../src/ticket.js";
 import * as b from "../../src/testing.js";
-import { DecisionStep, NO_DECISION } from "./itf.js";
+import { DecisionStep, NO_DECISION } from "../../src/itf.js";
 import { ConversionError, decision_from_itf } from "./convert.js";
 export {
   ConversionError,

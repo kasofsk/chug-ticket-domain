@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import { readFileSync, mkdtempSync, writeFileSync, rmSync } from "node:fs";
 import { join, basename } from "node:path";
 import { tmpdir } from "node:os";
-import * as itf from "./itf.js";
+import * as itf from "../../src/itf.js";
 import { graph_from_itf, decision_from_itf } from "./convert.js";
 const traces = itf.load_traces();
 test("indexed traces all decode with declared shape and metadata", () => {

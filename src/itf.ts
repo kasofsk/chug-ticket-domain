@@ -1,6 +1,6 @@
 import { readFileSync, readdirSync } from "node:fs";
 import { basename, resolve } from "node:path";
-import { equal } from "../../src/task.js";
+import { equal } from "./task.js";
 export class ItfError extends Error {}
 export class Variant {
   constructor(
@@ -28,7 +28,7 @@ export const NO_DECISION = new Variant(
 );
 export const TRACES_DIR = resolve(
   import.meta.dirname,
-  "../../model/ticket-domain/traces",
+  "../model/ticket-domain/traces",
 );
 function object(v: unknown): Record<string, unknown> {
   if (!v || typeof v !== "object" || Array.isArray(v))

@@ -1,4 +1,4 @@
-import { Variant, Value } from "./itf.js";
+import { Variant, Value } from "../../src/itf.js";
 export class ConversionError extends Error {}
 function record(v: Value, fields: readonly string[]): Record<string, Value> {
   if (
