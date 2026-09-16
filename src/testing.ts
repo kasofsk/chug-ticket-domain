@@ -1,6 +1,6 @@
-import * as t from "../src/task.js";
-import * as e from "../src/evaluation.js";
-import * as k from "../src/ticket.js";
+import * as t from "./task.js";
+import * as e from "./evaluation.js";
+import * as k from "./ticket.js";
 export const source = (commit: number) =>
   new t.WorkspaceSource(t.ContentRef(1), t.Digest(commit));
 export const WORK = new t.TaskDefinition(

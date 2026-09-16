@@ -1,5 +1,5 @@
 {
-  "generator": "ticket-domain/export_traces.ts",
+  "generator": "model/ticket-domain/export_traces.ts",
   "model": "ticket_tests.qnt",
   "scenarioSeed": "0x5ce9a10",
   "simulationSeeds": [

@@ -2,7 +2,7 @@ import { expect, test } from "vitest";
 import * as t from "../src/task.js";
 import * as e from "../src/evaluation.js";
 import * as k from "../src/ticket.js";
-import * as b from "./builders.js";
+import * as b from "../src/testing.js";
 const tid = new t.WorkTaskId(t.TicketId(1), t.CycleNumber(1));
 const obligation = new t.TaskObligation(tid, b.WORK, b.source(1), []);
 const result = (

@@ -1,6 +1,6 @@
 {
   "name": "@kasofsk/chug-ticket-domain",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "The Chuggernaut ticket domain: a Quint model of the ticket lifecycle, the pure TypeScript core refined from it, and the conformance harness that holds the two together.",
   "license": "UNLICENSED",
   "private": false,
@@ -30,7 +30,11 @@
       "default": "./dist/evaluation.js"
     },
     "./model/*": "./model/*",
-    "./package.json": "./package.json"
+    "./package.json": "./package.json",
+    "./testing": {
+      "types": "./dist/testing.d.ts",
+      "default": "./dist/testing.js"
+    }
   },
   "files": [
     "dist",
