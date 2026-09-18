@@ -38,16 +38,9 @@ import {
   WorkTaskId,
   EvaluationTaskId,
   TaskId,
-  ReadRepository,
-  PublishRepositoryResult,
-  GitAccess,
   ExecutionRequirements,
-  WorkspaceSource,
-  GitOutput,
-  OutputRef,
   TaskDefinition,
   TaskObligation,
-  ResultFinding,
   ValidatedTaskResult,
   TaskFailure,
   TaskResultProduced,
@@ -60,19 +53,16 @@ import {
   Generation,
   EvaluatorKey,
   ContentRef,
-  Digest,
+  ContextRef,
 } from "../../src/task.js";
 import {
   EvaluatorDefinition,
   StageDefinition,
   EvaluationPlan,
   EvaluationInput,
-  SummaryReason,
-  ExitCodeReason,
-  EvaluationReason,
-  EvaluationFinding,
-  PassDetail,
-  FailDetail,
+  EvaluatorPass,
+  EvaluatorFail,
+  EvaluationVerdict,
   EvaluatorPassed,
   EvaluatorFailed,
   EvaluatorResult,
@@ -92,9 +82,6 @@ import {
   EvaluationInstance,
 } from "../../src/evaluation.js";
 import {
-  AuthoredContent,
-  LegacyContent,
-  ReleasedContent,
   ReleasedWorkInput,
   InitialWork,
   EvaluationRework,
@@ -123,6 +110,12 @@ import {
   TicketState,
   Ticket,
   TicketGraph,
+  WorkResultReport,
+  EvaluationResultReport,
+  TerminalFailureReport,
+  TaskTerminalReport,
+  ProcessFailure,
+  ExecutionUnavailableFailure,
   TicketAlreadyExists,
   DependenciesNotFound,
   SelfDependency,
@@ -131,12 +124,10 @@ import {
   TicketIdentityMismatch,
   TicketRevisionStale,
   TicketDependenciesChanged,
-  DispatchSourceRepositoryMismatch,
   DependenciesIncomplete,
   TicketNotRevocable,
   TicketNotResumable,
   TaskNotCurrent,
-  WorkResultMissingExactGitOutput,
   FinalizationNotCurrent,
   TicketRefusal,
   TicketCreated,
@@ -184,8 +175,8 @@ function parse_EvaluatorKey(v: Value): EvaluatorKey {
 function parse_ContentRef(v: Value): ContentRef {
   return ContentRef(integer(v));
 }
-function parse_Digest(v: Value): Digest {
-  return Digest(integer(v));
+function parse_ContextRef(v: Value): ContextRef {
+  return ContextRef(integer(v));
 }
 function parse_WorkTaskId(v: Value): WorkTaskId {
   if (!(v instanceof Variant) || v.tag !== "WorkTask")
@@ -216,46 +207,15 @@ function parse_EvaluationTaskId(v: Value): EvaluationTaskId {
     parse_EvaluatorKey(r["evaluator"]!),
   );
 }
-function parse_ReadRepository(v: Value): ReadRepository {
-  if (!(v instanceof Variant) || v.tag !== "ReadRepository")
-    throw new ConversionError("expected ReadRepository variant");
-  const payload = v.value;
-  if (!Array.isArray(payload) || payload.length)
-    throw new ConversionError("expected nullary payload");
-  return new ReadRepository();
-}
-function parse_PublishRepositoryResult(v: Value): PublishRepositoryResult {
-  if (!(v instanceof Variant) || v.tag !== "PublishRepositoryResult")
-    throw new ConversionError("expected PublishRepositoryResult variant");
-  const payload = v.value;
-  if (!Array.isArray(payload) || payload.length)
-    throw new ConversionError("expected nullary payload");
-  return new PublishRepositoryResult();
-}
 function parse_ExecutionRequirements(v: Value): ExecutionRequirements {
-  const r = record(v, ["repository", "access", "requiredCapabilities"]);
+  const r = record(v, ["requiredCapabilities"]);
   return new ExecutionRequirements(
-    parse_ContentRef(r["repository"]!),
-    parse_GitAccess(r["access"]!),
     set(r["requiredCapabilities"]!).map((name) => {
       if (typeof name !== "string")
         throw new ConversionError("expected capability name");
       return name;
     }),
   );
-}
-function parse_WorkspaceSource(v: Value): WorkspaceSource {
-  const r = record(v, ["repository", "commit"]);
-  return new WorkspaceSource(
-    parse_ContentRef(r["repository"]!),
-    parse_Digest(r["commit"]!),
-  );
-}
-function parse_GitOutput(v: Value): GitOutput {
-  if (!(v instanceof Variant) || v.tag !== "GitOutput")
-    throw new ConversionError("expected GitOutput variant");
-  const payload = v.value;
-  return new GitOutput(parse_WorkspaceSource(payload));
 }
 function parse_TaskDefinition(v: Value): TaskDefinition {
   const r = record(v, [
@@ -272,35 +232,18 @@ function parse_TaskDefinition(v: Value): TaskDefinition {
   );
 }
 function parse_TaskObligation(v: Value): TaskObligation {
-  const r = record(v, ["task", "definition", "source", "context"]);
+  const r = record(v, ["task", "definition", "contextRef"]);
   return new TaskObligation(
     parse_TaskId(r["task"]!),
     parse_TaskDefinition(r["definition"]!),
-    parse_WorkspaceSource(r["source"]!),
-    list(r["context"]!).map((item) => parse_ContentRef(item)),
-  );
-}
-function parse_ResultFinding(v: Value): ResultFinding {
-  const r = record(v, ["id", "description"]);
-  return new ResultFinding(
-    integer(r["id"]!),
-    parse_ContentRef(r["description"]!),
+    parse_ContextRef(r["contextRef"]!),
   );
 }
 function parse_ValidatedTaskResult(v: Value): ValidatedTaskResult {
-  const r = record(v, [
-    "obligation",
-    "manifest",
-    "outputs",
-    "value",
-    "findings",
-  ]);
+  const r = record(v, ["obligation", "resultRef"]);
   return new ValidatedTaskResult(
     parse_TaskObligation(r["obligation"]!),
-    parse_ContentRef(r["manifest"]!),
-    list(r["outputs"]!).map((item) => parse_OutputRef(item)),
-    integer(r["value"]!),
-    list(r["findings"]!).map((item) => parse_ResultFinding(item)),
+    parse_ContentRef(r["resultRef"]!),
   );
 }
 function parse_TaskFailure(v: Value): TaskFailure {
@@ -349,58 +292,24 @@ function parse_EvaluationPlan(v: Value): EvaluationPlan {
   );
 }
 function parse_EvaluationInput(v: Value): EvaluationInput {
-  const r = record(v, ["ticket", "workResult", "acceptedSource"]);
+  const r = record(v, ["ticket", "workResult", "acceptedSourceRef"]);
   return new EvaluationInput(
     parse_TicketId(r["ticket"]!),
     parse_ContentRef(r["workResult"]!),
-    parse_WorkspaceSource(r["acceptedSource"]!),
-  );
-}
-function parse_SummaryReason(v: Value): SummaryReason {
-  if (!(v instanceof Variant) || v.tag !== "SummaryReason")
-    throw new ConversionError("expected SummaryReason variant");
-  const payload = v.value;
-  return new SummaryReason(integer(payload));
-}
-function parse_ExitCodeReason(v: Value): ExitCodeReason {
-  if (!(v instanceof Variant) || v.tag !== "ExitCodeReason")
-    throw new ConversionError("expected ExitCodeReason variant");
-  const payload = v.value;
-  return new ExitCodeReason(integer(payload));
-}
-function parse_EvaluationFinding(v: Value): EvaluationFinding {
-  const r = record(v, ["id", "description"]);
-  return new EvaluationFinding(
-    integer(r["id"]!),
-    parse_ContentRef(r["description"]!),
-  );
-}
-function parse_PassDetail(v: Value): PassDetail {
-  const r = record(v, ["reason", "resultManifest"]);
-  return new PassDetail(
-    parse_EvaluationReason(r["reason"]!),
-    parse_ContentRef(r["resultManifest"]!),
-  );
-}
-function parse_FailDetail(v: Value): FailDetail {
-  const r = record(v, ["reason", "resultManifest", "findings"]);
-  return new FailDetail(
-    parse_EvaluationReason(r["reason"]!),
-    parse_ContentRef(r["resultManifest"]!),
-    list(r["findings"]!).map((item) => parse_EvaluationFinding(item)),
+    parse_ContentRef(r["acceptedSourceRef"]!),
   );
 }
 function parse_EvaluatorPassed(v: Value): EvaluatorPassed {
   if (!(v instanceof Variant) || v.tag !== "EvaluatorPassed")
     throw new ConversionError("expected EvaluatorPassed variant");
   const payload = v.value;
-  return new EvaluatorPassed(parse_PassDetail(payload));
+  return new EvaluatorPassed(parse_ContentRef(payload));
 }
 function parse_EvaluatorFailed(v: Value): EvaluatorFailed {
   if (!(v instanceof Variant) || v.tag !== "EvaluatorFailed")
     throw new ConversionError("expected EvaluatorFailed variant");
   const payload = v.value;
-  return new EvaluatorFailed(parse_FailDetail(payload));
+  return new EvaluatorFailed(parse_ContentRef(payload));
 }
 function parse_Awaiting(v: Value): Awaiting {
   if (!(v instanceof Variant) || v.tag !== "Awaiting")
@@ -431,12 +340,10 @@ function parse_EvaluatorExecutionUnavailable(
   return new EvaluatorExecutionUnavailable(parse_ContentRef(payload));
 }
 function parse_EvaluationReworkEntry(v: Value): EvaluationReworkEntry {
-  const r = record(v, ["evaluator", "reason", "resultManifest", "findings"]);
+  const r = record(v, ["evaluator", "resultRef"]);
   return new EvaluationReworkEntry(
     parse_EvaluatorKey(r["evaluator"]!),
-    parse_EvaluationReason(r["reason"]!),
-    parse_ContentRef(r["resultManifest"]!),
-    list(r["findings"]!).map((item) => parse_EvaluationFinding(item)),
+    parse_ContentRef(r["resultRef"]!),
   );
 }
 function parse_StageRun(v: Value): StageRun {
@@ -496,26 +403,10 @@ function parse_EvaluationInstance(v: Value): EvaluationInstance {
     parse_EvaluationState(r["state"]!),
   );
 }
-function parse_AuthoredContent(v: Value): AuthoredContent {
-  if (!(v instanceof Variant) || v.tag !== "AuthoredReleasedContent")
-    throw new ConversionError("expected AuthoredContent variant");
-  const payload = v.value;
-  const r = record(payload, ["title", "instructions"]);
-  return new AuthoredContent(
-    parse_ContentRef(r["title"]!),
-    parse_ContentRef(r["instructions"]!),
-  );
-}
-function parse_LegacyContent(v: Value): LegacyContent {
-  if (!(v instanceof Variant) || v.tag !== "LegacyReleasedContent")
-    throw new ConversionError("expected LegacyContent variant");
-  const payload = v.value;
-  return new LegacyContent(parse_ContentRef(payload));
-}
 function parse_ReleasedWorkInput(v: Value): ReleasedWorkInput {
   const r = record(v, ["content", "inputBindings"]);
   return new ReleasedWorkInput(
-    parse_ReleasedContent(r["content"]!),
+    parse_ContentRef(r["content"]!),
     parse_ContentRef(r["inputBindings"]!),
   );
 }
@@ -553,7 +444,7 @@ function parse_WorkExecution(v: Value): WorkExecution {
   const r = record(v, ["input", "source"]);
   return new WorkExecution(
     parse_WorkInput(r["input"]!),
-    parse_WorkspaceSource(r["source"]!),
+    parse_ContentRef(r["source"]!),
   );
 }
 function parse_FinalizationOperation(v: Value): FinalizationOperation {
@@ -562,14 +453,14 @@ function parse_FinalizationOperation(v: Value): FinalizationOperation {
     parse_CycleNumber(r["workCycle"]!),
     parse_Generation(r["generation"]!),
     parse_ContentRef(r["input"]!),
-    parse_WorkspaceSource(r["source"]!),
+    parse_ContentRef(r["source"]!),
   );
 }
 function parse_WorkEscalation(v: Value): WorkEscalation {
   const r = record(v, ["resumeInput", "source", "evidence"]);
   return new WorkEscalation(
     parse_WorkInput(r["resumeInput"]!),
-    parse_WorkspaceSource(r["source"]!),
+    parse_ContentRef(r["source"]!),
     parse_ContentRef(r["evidence"]!),
   );
 }
@@ -579,7 +470,7 @@ function parse_EvaluationFailureEscalation(
   const r = record(v, ["evidence", "source"]);
   return new EvaluationFailureEscalation(
     list(r["evidence"]!).map((item) => parse_EvaluationReworkEntry(item)),
-    parse_WorkspaceSource(r["source"]!),
+    parse_ContentRef(r["source"]!),
   );
 }
 function parse_FinalizationEscalation(v: Value): FinalizationEscalation {
@@ -647,7 +538,7 @@ function parse_ReleasedTicket(v: Value): ReleasedTicket {
   ]);
   return new ReleasedTicket(
     parse_TicketId(r["id"]!),
-    parse_ReleasedContent(r["content"]!),
+    parse_ContentRef(r["content"]!),
     parse_ContentRef(r["inputBindings"]!),
     new Set(set(r["dependencies"]!).map((item) => parse_TicketId(item))),
     parse_TaskDefinition(r["workConfiguration"]!),
@@ -779,16 +670,6 @@ function parse_TicketDependenciesChanged(v: Value): TicketDependenciesChanged {
   const payload = v.value;
   return new TicketDependenciesChanged(parse_TicketId(payload));
 }
-function parse_DispatchSourceRepositoryMismatch(
-  v: Value,
-): DispatchSourceRepositoryMismatch {
-  if (!(v instanceof Variant) || v.tag !== "DispatchSourceRepositoryMismatch")
-    throw new ConversionError(
-      "expected DispatchSourceRepositoryMismatch variant",
-    );
-  const payload = v.value;
-  return new DispatchSourceRepositoryMismatch(parse_TicketId(payload));
-}
 function parse_DependenciesIncomplete(v: Value): DependenciesIncomplete {
   if (!(v instanceof Variant) || v.tag !== "DependenciesIncomplete")
     throw new ConversionError("expected DependenciesIncomplete variant");
@@ -820,16 +701,6 @@ function parse_TaskNotCurrent(v: Value): TaskNotCurrent {
     parse_TicketId(r["ticket"]!),
     parse_TaskId(r["task"]!),
   );
-}
-function parse_WorkResultMissingExactGitOutput(
-  v: Value,
-): WorkResultMissingExactGitOutput {
-  if (!(v instanceof Variant) || v.tag !== "WorkResultMissingExactGitOutput")
-    throw new ConversionError(
-      "expected WorkResultMissingExactGitOutput variant",
-    );
-  const payload = v.value;
-  return new WorkResultMissingExactGitOutput(parse_TicketId(payload));
 }
 function parse_FinalizationNotCurrent(v: Value): FinalizationNotCurrent {
   if (!(v instanceof Variant) || v.tag !== "FinalizationNotCurrent")
@@ -866,7 +737,7 @@ function parse_TicketDispatched(v: Value): TicketDispatched {
   const r = record(payload, ["ticket", "source"]);
   return new TicketDispatched(
     parse_TicketId(r["ticket"]!),
-    parse_WorkspaceSource(r["source"]!),
+    parse_ContentRef(r["source"]!),
   );
 }
 function parse_TicketRevoked(v: Value): TicketRevoked {
@@ -897,10 +768,11 @@ function parse_TicketWorkResultAccepted(v: Value): TicketWorkResultAccepted {
   if (!(v instanceof Variant) || v.tag !== "TicketWorkResultAccepted")
     throw new ConversionError("expected TicketWorkResultAccepted variant");
   const payload = v.value;
-  const r = record(payload, ["ticket", "result"]);
+  const r = record(payload, ["ticket", "result", "acceptedSourceRef"]);
   return new TicketWorkResultAccepted(
     parse_TicketId(r["ticket"]!),
     parse_ValidatedTaskResult(r["result"]!),
+    parse_ContentRef(r["acceptedSourceRef"]!),
   );
 }
 function parse_TicketWorkProcessFailed(v: Value): TicketWorkProcessFailed {
@@ -935,20 +807,20 @@ function parse_TicketEvaluationProgressed(
   if (!(v instanceof Variant) || v.tag !== "TicketEvaluationProgressed")
     throw new ConversionError("expected TicketEvaluationProgressed variant");
   const payload = v.value;
-  const r = record(payload, ["ticket", "terminal"]);
+  const r = record(payload, ["ticket", "report"]);
   return new TicketEvaluationProgressed(
     parse_TicketId(r["ticket"]!),
-    parse_TaskTerminal(r["terminal"]!),
+    parse_TaskTerminalReport(r["report"]!),
   );
 }
 function parse_TicketEvaluationPassed(v: Value): TicketEvaluationPassed {
   if (!(v instanceof Variant) || v.tag !== "TicketEvaluationPassed")
     throw new ConversionError("expected TicketEvaluationPassed variant");
   const payload = v.value;
-  const r = record(payload, ["ticket", "terminal"]);
+  const r = record(payload, ["ticket", "report"]);
   return new TicketEvaluationPassed(
     parse_TicketId(r["ticket"]!),
-    parse_TaskTerminal(r["terminal"]!),
+    parse_TaskTerminalReport(r["report"]!),
   );
 }
 function parse_TicketEvaluationReworkStarted(
@@ -957,10 +829,10 @@ function parse_TicketEvaluationReworkStarted(
   if (!(v instanceof Variant) || v.tag !== "TicketEvaluationReworkStarted")
     throw new ConversionError("expected TicketEvaluationReworkStarted variant");
   const payload = v.value;
-  const r = record(payload, ["ticket", "terminal", "evidence"]);
+  const r = record(payload, ["ticket", "report", "evidence"]);
   return new TicketEvaluationReworkStarted(
     parse_TicketId(r["ticket"]!),
-    parse_TaskTerminal(r["terminal"]!),
+    parse_TaskTerminalReport(r["report"]!),
     list(r["evidence"]!).map((item) => parse_EvaluationReworkEntry(item)),
   );
 }
@@ -972,10 +844,10 @@ function parse_TicketEvaluationFailureEscalated(
       "expected TicketEvaluationFailureEscalated variant",
     );
   const payload = v.value;
-  const r = record(payload, ["ticket", "terminal", "evidence"]);
+  const r = record(payload, ["ticket", "report", "evidence"]);
   return new TicketEvaluationFailureEscalated(
     parse_TicketId(r["ticket"]!),
-    parse_TaskTerminal(r["terminal"]!),
+    parse_TaskTerminalReport(r["report"]!),
     list(r["evidence"]!).map((item) => parse_EvaluationReworkEntry(item)),
   );
 }
@@ -983,10 +855,10 @@ function parse_TicketEvaluationBlocked(v: Value): TicketEvaluationBlocked {
   if (!(v instanceof Variant) || v.tag !== "TicketEvaluationBlocked")
     throw new ConversionError("expected TicketEvaluationBlocked variant");
   const payload = v.value;
-  const r = record(payload, ["ticket", "terminal"]);
+  const r = record(payload, ["ticket", "report"]);
   return new TicketEvaluationBlocked(
     parse_TicketId(r["ticket"]!),
-    parse_TaskTerminal(r["terminal"]!),
+    parse_TaskTerminalReport(r["report"]!),
   );
 }
 function parse_TicketFinalizationSucceeded(
@@ -1086,26 +958,6 @@ function parse_TaskId(v: Value): TaskId {
       throw new ConversionError(`unknown TaskId tag '${v.tag}'`);
   }
 }
-function parse_GitAccess(v: Value): GitAccess {
-  if (!(v instanceof Variant)) throw new ConversionError("expected a variant");
-  switch (v.tag) {
-    case "ReadRepository":
-      return parse_ReadRepository(v);
-    case "PublishRepositoryResult":
-      return parse_PublishRepositoryResult(v);
-    default:
-      throw new ConversionError(`unknown GitAccess tag '${v.tag}'`);
-  }
-}
-function parse_OutputRef(v: Value): OutputRef {
-  if (!(v instanceof Variant)) throw new ConversionError("expected a variant");
-  switch (v.tag) {
-    case "GitOutput":
-      return parse_GitOutput(v);
-    default:
-      throw new ConversionError(`unknown OutputRef tag '${v.tag}'`);
-  }
-}
 function parse_TaskTerminal(v: Value): TaskTerminal {
   if (!(v instanceof Variant)) throw new ConversionError("expected a variant");
   switch (v.tag) {
@@ -1119,16 +971,53 @@ function parse_TaskTerminal(v: Value): TaskTerminal {
       throw new ConversionError(`unknown TaskTerminal tag '${v.tag}'`);
   }
 }
-function parse_EvaluationReason(v: Value): EvaluationReason {
+function parse_EvaluationVerdict(v: Value): EvaluationVerdict {
   if (!(v instanceof Variant)) throw new ConversionError("expected a variant");
   switch (v.tag) {
-    case "SummaryReason":
-      return parse_SummaryReason(v);
-    case "ExitCodeReason":
-      return parse_ExitCodeReason(v);
+    case "EvaluatorPass":
+      return new EvaluatorPass();
+    case "EvaluatorFail":
+      return new EvaluatorFail();
     default:
-      throw new ConversionError(`unknown EvaluationReason tag '${v.tag}'`);
+      throw new ConversionError(`unknown EvaluationVerdict tag '${v.tag}'`);
   }
+}
+function parse_TaskTerminalReport(v: Value): TaskTerminalReport {
+  if (!(v instanceof Variant)) throw new ConversionError("expected a variant");
+  if (v.tag === "WorkResultReport") {
+    const r = record(v.value, ["ticket", "result", "acceptedSourceRef"]);
+    return new WorkResultReport(
+      parse_TicketId(r["ticket"]!),
+      parse_ValidatedTaskResult(r["result"]!),
+      parse_ContentRef(r["acceptedSourceRef"]!),
+    );
+  }
+  if (v.tag === "EvaluationResultReport") {
+    const r = record(v.value, ["ticket", "result", "verdict"]);
+    return new EvaluationResultReport(
+      parse_TicketId(r["ticket"]!),
+      parse_ValidatedTaskResult(r["result"]!),
+      parse_EvaluationVerdict(r["verdict"]!),
+    );
+  }
+  if (v.tag === "TerminalFailureReport") {
+    const r = record(v.value, ["ticket", "failure", "kind"]);
+    const kind = r["kind"];
+    if (!(kind instanceof Variant))
+      throw new ConversionError("expected failure kind");
+    return new TerminalFailureReport(
+      parse_TicketId(r["ticket"]!),
+      parse_TaskFailure(r["failure"]!),
+      kind.tag === "ProcessFailure"
+        ? new ProcessFailure()
+        : kind.tag === "ExecutionUnavailableFailure"
+          ? new ExecutionUnavailableFailure()
+          : (() => {
+              throw new ConversionError("unknown failure kind");
+            })(),
+    );
+  }
+  throw new ConversionError(`unknown TaskTerminalReport tag '${v.tag}'`);
 }
 function parse_EvaluatorResult(v: Value): EvaluatorResult {
   if (!(v instanceof Variant)) throw new ConversionError("expected a variant");
@@ -1169,17 +1058,6 @@ function parse_EvaluationState(v: Value): EvaluationState {
       return parse_EvaluationBlocked(v);
     default:
       throw new ConversionError(`unknown EvaluationState tag '${v.tag}'`);
-  }
-}
-function parse_ReleasedContent(v: Value): ReleasedContent {
-  if (!(v instanceof Variant)) throw new ConversionError("expected a variant");
-  switch (v.tag) {
-    case "AuthoredReleasedContent":
-      return parse_AuthoredContent(v);
-    case "LegacyReleasedContent":
-      return parse_LegacyContent(v);
-    default:
-      throw new ConversionError(`unknown ReleasedContent tag '${v.tag}'`);
   }
 }
 function parse_WorkCause(v: Value): WorkCause {
@@ -1252,8 +1130,6 @@ function parse_TicketRefusal(v: Value): TicketRefusal {
       return parse_TicketRevisionStale(v);
     case "TicketDependenciesChanged":
       return parse_TicketDependenciesChanged(v);
-    case "DispatchSourceRepositoryMismatch":
-      return parse_DispatchSourceRepositoryMismatch(v);
     case "DependenciesIncomplete":
       return parse_DependenciesIncomplete(v);
     case "TicketNotRevocable":
@@ -1262,8 +1138,6 @@ function parse_TicketRefusal(v: Value): TicketRefusal {
       return parse_TicketNotResumable(v);
     case "TaskNotCurrent":
       return parse_TaskNotCurrent(v);
-    case "WorkResultMissingExactGitOutput":
-      return parse_WorkResultMissingExactGitOutput(v);
     case "FinalizationNotCurrent":
       return parse_FinalizationNotCurrent(v);
     default:

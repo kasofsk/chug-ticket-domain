@@ -49,7 +49,7 @@ test("trace export is deterministic with complete model-declared coverage", () =
     run: fake_quint,
   });
   expect(first.removed).toEqual(["stale.itf.json"]);
-  expect(first.traces).toHaveLength(29);
+  expect(first.traces).toHaveLength(25);
   expect(existsSync(join(output, "README.md"))).toBe(true);
   expect(first.coverage).toEqual(
     JSON.parse(readFileSync(traces.INDEX, "utf8")).coverage,

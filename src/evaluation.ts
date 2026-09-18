@@ -1,5 +1,6 @@
 import {
   ContentRef,
+  ContextRef,
   CycleNumber,
   EvaluationTaskId,
   EvaluatorKey,
@@ -13,7 +14,6 @@ import {
   TaskTerminal,
   TicketId,
   ValidatedTaskResult,
-  WorkspaceSource,
 } from "./task.js";
 
 export class EvaluatorDefinition {
@@ -52,71 +52,38 @@ export class EvaluationInput {
   constructor(
     readonly ticket: TicketId,
     readonly work_result: ContentRef,
-    readonly accepted_source: WorkspaceSource,
+    readonly accepted_source_ref: ContentRef,
   ) {
     Object.freeze(this);
   }
 }
 
-export class SummaryReason {
-  readonly kind = "SummaryReason";
-  constructor(readonly value: number) {
+export class EvaluatorPass {
+  readonly kind = "EvaluatorPass";
+  constructor() {
     Object.freeze(this);
   }
 }
 
-export class ExitCodeReason {
-  readonly kind = "ExitCodeReason";
-  constructor(readonly code: number) {
+export class EvaluatorFail {
+  readonly kind = "EvaluatorFail";
+  constructor() {
     Object.freeze(this);
   }
 }
 
-export type EvaluationReason = SummaryReason | ExitCodeReason;
-
-export class EvaluationFinding {
-  readonly kind = "EvaluationFinding";
-  constructor(
-    readonly id: number,
-    readonly description: ContentRef,
-  ) {
-    Object.freeze(this);
-  }
-}
-
-export class PassDetail {
-  readonly kind = "PassDetail";
-  constructor(
-    readonly reason: EvaluationReason,
-    readonly result_manifest: ContentRef,
-  ) {
-    Object.freeze(this);
-  }
-}
-
-export class FailDetail {
-  readonly kind = "FailDetail";
-  constructor(
-    readonly reason: EvaluationReason,
-    readonly result_manifest: ContentRef,
-    readonly findings: readonly EvaluationFinding[],
-  ) {
-    this.findings = Object.freeze([...findings]);
-    validate_FailDetail(this);
-    Object.freeze(this);
-  }
-}
+export type EvaluationVerdict = EvaluatorPass | EvaluatorFail;
 
 export class EvaluatorPassed {
   readonly kind = "EvaluatorPassed";
-  constructor(readonly detail: PassDetail) {
+  constructor(readonly result_ref: ContentRef) {
     Object.freeze(this);
   }
 }
 
 export class EvaluatorFailed {
   readonly kind = "EvaluatorFailed";
-  constructor(readonly detail: FailDetail) {
+  constructor(readonly result_ref: ContentRef) {
     Object.freeze(this);
   }
 }
@@ -158,12 +125,8 @@ export class EvaluationReworkEntry {
   readonly kind = "EvaluationReworkEntry";
   constructor(
     readonly evaluator: EvaluatorKey,
-    readonly reason: EvaluationReason,
-    readonly result_manifest: ContentRef,
-    readonly findings: readonly EvaluationFinding[],
+    readonly result_ref: ContentRef,
   ) {
-    this.findings = Object.freeze([...findings]);
-    validate_EvaluationReworkEntry(this);
     Object.freeze(this);
   }
 }
@@ -240,23 +203,6 @@ export class EvaluationInstance {
 }
 
 import { equal } from "./task.js";
-export const MAX_FINDINGS = 32;
-export function finding_valid(f: EvaluationFinding): boolean {
-  return f.id > 0 && f.description > 0;
-}
-export function findings_valid(fs: readonly EvaluationFinding[]): boolean {
-  return (
-    fs.length <= MAX_FINDINGS &&
-    fs.every(finding_valid) &&
-    new Set(fs.map((f) => f.id)).size === fs.length
-  );
-}
-function validate_FailDetail(v: FailDetail): void {
-  if (!findings_valid(v.findings)) throw new Error("findings are not valid");
-}
-function validate_EvaluationReworkEntry(v: EvaluationReworkEntry): void {
-  if (!findings_valid(v.findings)) throw new Error("findings are not valid");
-}
 function validate_StageRun(v: StageRun): void {
   Object.defineProperty(v, "evaluators", {
     value: new Map(v.evaluators),
@@ -390,33 +336,45 @@ function _conclude_stage(c: EvaluationInstance): EvaluationInstance {
     ),
   );
 }
-export function decode_evaluator_result(
-  r: ValidatedTaskResult,
-): EvaluatorResult {
-  const reason = new SummaryReason(r.value);
-  return r.value > 0
-    ? new EvaluatorPassed(new PassDetail(reason, r.manifest))
-    : new EvaluatorFailed(
-        new FailDetail(
-          reason,
-          r.manifest,
-          r.findings.map((f) => new EvaluationFinding(f.id, f.description)),
-        ),
-      );
-}
-export function apply_terminal(
+export function apply_produced(
   c: EvaluationInstance,
   task: TaskId,
-  t: TaskTerminal,
+  result: ValidatedTaskResult,
+  verdict: EvaluationVerdict,
+): EvaluationInstance {
+  let recorded = c;
+  if (
+    c.state instanceof Running &&
+    task_current(c, task) &&
+    current_task_obligations(c).some((obligation) =>
+      equal(obligation, result.obligation),
+    )
+  ) {
+    recorded = _with_status(
+      c,
+      c.state.progress,
+      evaluator_key_for_task(c, c.state.progress.stage, task),
+      new Produced(
+        verdict instanceof EvaluatorPass
+          ? new EvaluatorPassed(result.result_ref)
+          : new EvaluatorFailed(result.result_ref),
+      ),
+    );
+  }
+  return _conclude_stage(recorded);
+}
+export function apply_failure(
+  c: EvaluationInstance,
+  task: TaskId,
+  terminal: TaskTerminal,
 ): EvaluationInstance {
   let recorded = c;
   if (c.state instanceof Running && task_current(c, task)) {
+    if (terminal instanceof TaskResultProduced) return _conclude_stage(c);
     const status =
-      t instanceof TaskResultProduced
-        ? new Produced(decode_evaluator_result(t.result))
-        : t instanceof TaskProcessFailed
-          ? new EvaluatorProcessFailed(t.failure.evidence)
-          : new EvaluatorExecutionUnavailable(t.failure.evidence);
+      terminal instanceof TaskProcessFailed
+        ? new EvaluatorProcessFailed(terminal.failure.evidence)
+        : new EvaluatorExecutionUnavailable(terminal.failure.evidence);
     recorded = _with_status(
       c,
       c.state.progress,
@@ -461,8 +419,7 @@ export function current_task_obligations(
       new TaskObligation(
         task_id_for(c, p, e.key),
         e.task,
-        c.input.accepted_source,
-        [c.input.work_result],
+        ContextRef(c.input.work_result),
       ),
   );
 }
@@ -471,14 +428,7 @@ export function failed_entries(
   s: EvaluatorStatus,
 ): readonly EvaluationReworkEntry[] {
   return s instanceof Produced && s.result instanceof EvaluatorFailed
-    ? [
-        new EvaluationReworkEntry(
-          key,
-          s.result.detail.reason,
-          s.result.detail.result_manifest,
-          s.result.detail.findings,
-        ),
-      ]
+    ? [new EvaluationReworkEntry(key, s.result.result_ref)]
     : [];
 }
 export function rework_entries(
@@ -509,9 +459,7 @@ export function stage_run_invariant(
     s instanceof Awaiting
       ? true
       : s instanceof Produced
-        ? s.result.detail.result_manifest > 0 &&
-          (!(s.result instanceof EvaluatorFailed) ||
-            findings_valid(s.result.detail.findings))
+        ? s.result.result_ref > 0
         : s.evidence > 0,
   );
 }
@@ -593,25 +541,13 @@ export function plan_valid(plan: EvaluationPlan): boolean {
     )
   );
 }
-export function plan_uses_repository(
-  plan: EvaluationPlan,
-  r: ContentRef,
-): boolean {
-  return plan.stages.every((s) =>
-    s.evaluators.every((e) => e.task.execution_requirements.repository === r),
-  );
-}
-export function validate_plan(plan: EvaluationPlan, r: ContentRef): boolean {
-  return plan_valid(plan) && plan_uses_repository(plan, r);
-}
 export function evaluation_invariant(c: EvaluationInstance): boolean {
   return (
     c.work_cycle > 0 &&
     c.input.ticket > 0 &&
     c.input.work_result > 0 &&
-    c.input.accepted_source.repository > 0 &&
-    c.input.accepted_source.commit > 0 &&
-    validate_plan(c.plan, c.input.accepted_source.repository) &&
+    c.input.accepted_source_ref > 0 &&
+    plan_valid(c.plan) &&
     state_history_invariant(c)
   );
 }

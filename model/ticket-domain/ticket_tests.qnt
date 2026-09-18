@@ -6,14 +6,14 @@ module ticket_tests {
   pure val WORK = {
     workload: 1,
     inputs: 1,
-    executionRequirements: { repository: 1, access: PublishRepositoryResult, requiredCapabilities: Set() },
+    executionRequirements: { requiredCapabilities: Set() },
     resultContract: 1,
   }
 
   pure val EVALUATOR = {
     workload: 2,
     inputs: 2,
-    executionRequirements: { repository: 1, access: ReadRepository, requiredCapabilities: Set() },
+    executionRequirements: { requiredCapabilities: Set() },
     resultContract: 2,
   }
 
@@ -33,10 +33,7 @@ module ticket_tests {
     ],
   }
 
-  pure def source(ticket: int, commit: int): WorkspaceSource = {
-    repository: 1,
-    commit: commit,
-  }
+  pure def source(ticket: int, ref: int): int = ref
 
   pure def dispatch(ticket: int): TicketCommand =
     DispatchTicket({ ticket: ticket, source: source(ticket, ticket * 1000 + 1) })
@@ -46,10 +43,7 @@ module ticket_tests {
     dependencies: Set[int],
   ): ReleasedTicket = {
     id: ticket,
-    content: AuthoredReleasedContent({
-      title: ticket * 100 + 1,
-      instructions: ticket * 100 + 2,
-    }),
+    content: ticket * 100 + 1,
     inputBindings: ticket * 100 + 3,
     dependencies: dependencies,
     workConfiguration: WORK,
@@ -62,10 +56,7 @@ module ticket_tests {
     dependencies: Set[int],
   ): ReleasedTicket = {
     ...released(ticket, dependencies),
-    content: AuthoredReleasedContent({
-      title: ticket * 100 + 51,
-      instructions: ticket * 100 + 52,
-    }),
+    content: ticket * 100 + 51,
   }
 
   pure def updateTo(
@@ -122,7 +113,7 @@ module ticket_tests {
     lastDecision' = lastDecision,
   }
 
-  action reportWorkResultWithOutputs(ticketId, manifest, outputs) = {
+  action reportWorkResultWithSource(ticketId, resultRef, acceptedSourceRef) = {
     if (not(graph.tickets.keys().contains(ticketId))) blocked
     else {
       val ticket = graph.tickets.get(ticketId)
@@ -130,83 +121,32 @@ module ticket_tests {
         | Work(work) => {
             val obligation =
               workTaskObligation(ticket, ticket.workCyclesStarted, work.source, work.input)
-            submit(ReportTaskTerminal({
+            submit(ReportTaskTerminal(WorkResultReport({
               ticket: ticketId,
-              terminal: TaskResultProduced(validatedTaskResult(
-                obligation,
-                manifest,
-                outputs,
-                1,
-                [],
-              )),
-            }))
+              result: validatedTaskResult(obligation, resultRef),
+              acceptedSourceRef: acceptedSourceRef,
+            })))
           }
         | _ => blocked
       }
     }
   }
 
-  action reportWorkResult(ticketId, manifest) =
-    reportWorkResultWithOutputs(ticketId, manifest, [GitOutput(source(ticketId, manifest))])
+  action reportWorkResult(ticketId, resultRef) =
+    reportWorkResultWithSource(ticketId, resultRef, source(ticketId, resultRef))
 
-  pure def nonPublishingReleased(ticket: int): ReleasedTicket = {
-    ...released(ticket, Set()),
-    workConfiguration: {
-      ...WORK,
-      executionRequirements: { repository: 1, access: ReadRepository, requiredCapabilities: Set() },
-    },
-  }
-
-  run nonPublishingDoneTest = {
-    init
-      .then(submit(CreateTicket(nonPublishingReleased(1))))
-      .then(submit(dispatch(1)))
-      .then(reportWorkResultWithOutputs(1, 101, []))
-      .then(check(match graph.tickets.get(1).state {
-        | Evaluation(evaluation) => evaluation.input.acceptedSource == source(1, 1001)
-        | _ => false
-      }))
-      .then(reportEvaluatorResult(1, 111, 1))
-      .then(reportEvaluatorResult(1, 112, 1))
-      .then(reportEvaluatorResult(1, 121, 1))
-      .then(reportFinalization(1, FinalizationSucceeded(131)))
-      .then(check(ticketDone(1)))
-  }
-
-  run nonPublishingEscalationTest = {
-    init
-      .then(submit(CreateTicket(nonPublishingReleased(1))))
-      .then(submit(dispatch(1)))
-      .then(reportWorkResultWithOutputs(1, 101, []))
-      .then(reportEvaluatorResultWithFailureDisposition(1, 111, -1, escalatePolicy))
-      .then(reportEvaluatorResultWithFailureDisposition(1, 112, 1, escalatePolicy))
-      .then(check(graph.tickets.get(1).workCyclesStarted == 1 and escalatedWith(1, (escalation) => match escalation {
-        | EvaluationFailureEscalated(failure) => failure.source == source(1, 1001)
-        | _ => false
-      })))
-  }
-
-  run publishingMissingOutputTest = {
-    init
-      .then(submit(CreateTicket(released(1, Set()))))
-      .then(submit(dispatch(1)))
-      .then(reportWorkResultWithOutputs(1, 101, []))
-      .then(check(lastDecision == TicketRefused(WorkResultMissingExactGitOutput(1))
-        and graph == priorGraph))
-  }
-
-  action reportWorkTerminal(ticketId, terminal) = {
+  action reportWorkFailure(ticketId, evidence, kind) = {
     if (not(graph.tickets.keys().contains(ticketId))) blocked
     else {
       val ticket = graph.tickets.get(ticketId)
       match ticket.state {
         | Work(work) => {
-            val obligation =
-              workTaskObligation(ticket, ticket.workCyclesStarted, work.source, work.input)
-            submit(ReportTaskTerminal({
+            val obligation = workTaskObligation(ticket, ticket.workCyclesStarted, work.source, work.input)
+            submit(ReportTaskTerminal(TerminalFailureReport({
               ticket: ticketId,
-              terminal: terminal(obligation.task),
-            }))
+              failure: { task: obligation.task, evidence: evidence },
+              kind: kind,
+            })))
           }
         | _ => blocked
       }
@@ -214,51 +154,18 @@ module ticket_tests {
   }
 
   action reportWorkProcessFailed(ticketId, evidence) =
-    reportWorkTerminal(ticketId, (task) =>
-      TaskProcessFailed({ task: task, evidence: evidence }))
+    reportWorkFailure(ticketId, evidence, ProcessFailure)
 
   action reportWorkExecutionUnavailable(ticketId, evidence) =
-    reportWorkTerminal(ticketId, (task) =>
-      TaskExecutionUnavailable({ task: task, evidence: evidence }))
+    reportWorkFailure(ticketId, evidence, ExecutionUnavailableFailure)
 
-  action reportEvaluatorResultWithFindings(
-    ticketId,
-    manifest,
-    value,
-    findings,
-  ) = {
-    if (not(graph.tickets.keys().contains(ticketId))) blocked
-    else {
-      val ticket = graph.tickets.get(ticketId)
-      match ticket.state {
-        | Evaluation(evaluation) => {
-            val obligation = currentTaskObligations(evaluation)[0]
-            submit(ReportTaskTerminal({
-              ticket: ticketId,
-              terminal: TaskResultProduced(validatedTaskResult(
-                obligation,
-                manifest,
-                [],
-                value,
-                findings,
-              )),
-            }))
-          }
-        | _ => blocked
-      }
-    }
-  }
-
-  action reportEvaluatorResult(
-    ticketId,
-    manifest,
-    value,
-  ) = reportEvaluatorResultWithFindings(ticketId, manifest, value, [])
+  action reportEvaluatorResult(ticketId, resultRef, verdict) =
+    reportEvaluatorResultWithFailureDisposition(ticketId, resultRef, verdict, reworkPolicy)
 
   action reportEvaluatorResultWithFailureDisposition(
     ticketId,
-    manifest,
-    value,
+    resultRef,
+    verdict,
     failurePolicy,
   ) = {
     if (not(graph.tickets.keys().contains(ticketId))) blocked
@@ -267,61 +174,40 @@ module ticket_tests {
       match ticket.state {
         | Evaluation(evaluation) => {
             val obligation = currentTaskObligations(evaluation)[0]
-            submitWithPolicy(ReportTaskTerminal({
+            submitWithPolicy(ReportTaskTerminal(EvaluationResultReport({
               ticket: ticketId,
-              terminal: TaskResultProduced(validatedTaskResult(
-                obligation,
-                manifest,
-                [],
-                value,
-                [],
-              )),
-            }), failurePolicy)
+              result: validatedTaskResult(obligation, resultRef),
+              verdict: verdict,
+            })), failurePolicy)
           }
         | _ => blocked
       }
     }
   }
 
-  action reportEvaluatorUnavailable(ticketId, evidence) = {
+  action reportEvaluatorFailure(ticketId, evidence, kind) = {
     if (not(graph.tickets.keys().contains(ticketId))) blocked
     else {
       val ticket = graph.tickets.get(ticketId)
       match ticket.state {
         | Evaluation(evaluation) => {
             val obligation = currentTaskObligations(evaluation)[0]
-            submit(ReportTaskTerminal({
+            submit(ReportTaskTerminal(TerminalFailureReport({
               ticket: ticketId,
-              terminal: TaskExecutionUnavailable({
-                task: obligation.task,
-                evidence: evidence,
-              }),
-            }))
+              failure: { task: obligation.task, evidence: evidence },
+              kind: kind,
+            })))
           }
         | _ => blocked
       }
     }
   }
 
-  action reportEvaluatorProcessFailed(ticketId, evidence) = {
-    if (not(graph.tickets.keys().contains(ticketId))) blocked
-    else {
-      val ticket = graph.tickets.get(ticketId)
-      match ticket.state {
-        | Evaluation(evaluation) => {
-            val obligation = currentTaskObligations(evaluation)[0]
-            submit(ReportTaskTerminal({
-              ticket: ticketId,
-              terminal: TaskProcessFailed({
-                task: obligation.task,
-                evidence: evidence,
-              }),
-            }))
-          }
-        | _ => blocked
-      }
-    }
-  }
+  action reportEvaluatorUnavailable(ticketId, evidence) =
+    reportEvaluatorFailure(ticketId, evidence, ExecutionUnavailableFailure)
+
+  action reportEvaluatorProcessFailed(ticketId, evidence) =
+    reportEvaluatorFailure(ticketId, evidence, ProcessFailure)
 
   action reportFinalization(
     ticketId,
@@ -348,10 +234,10 @@ module ticket_tests {
   def ticketDefinition(ticketId: int, definition: ReleasedTicket): bool =
     graph.tickets.get(ticketId).definition == definition
 
-  def decidedWorkContext: List[int] = match lastDecision {
+  def decidedWorkContexts: List[int] = match lastDecision {
     | TicketDecided(success) => success.obligations.foldl([], (found, obligation) =>
         match obligation {
-          | ExecuteTask(execution) => execution.task.context
+          | ExecuteTask(execution) => found.append(execution.task.contextRef)
           | _ => found
         })
     | TicketRefused(_) => []
@@ -381,7 +267,7 @@ module ticket_tests {
       | _ => false
     }
 
-  def workUsesSource(ticketId: int, expected: WorkspaceSource): bool =
+  def workUsesSource(ticketId: int, expected: int): bool =
     match graph.tickets.get(ticketId).state {
       | Work(work) => work.source == expected
       | _ => false
@@ -407,81 +293,44 @@ module ticket_tests {
     | _ => false
   }
 
-  def workReworkFindings(
-    ticketId: int,
-    evaluator: int,
-  ): List[EvaluationFinding] =
+  def workReworkRefs(ticketId: int): List[EvaluationReworkEntry] =
     match graph.tickets.get(ticketId).state {
       | Work(work) => match work.input.cause {
-          | EvaluationRework(entries) =>
-              entries.foldl([], (found, entry) =>
-                if (entry.evaluator == evaluator) found.concat(entry.findings)
-                else found)
+          | EvaluationRework(entries) => entries
           | _ => []
         }
       | _ => []
     }
 
-  run repositoryContractTest = {
-    val wrongEvaluationRepository = {
-      stages: [{
-        key: 10,
-        evaluators: [{
-          key: 11,
-          task: {
-            ...EVALUATOR,
-            executionRequirements: {
-              repository: 2,
-              access: ReadRepository,
-              requiredCapabilities: Set(),
-            },
-          },
-        }],
-      }],
-    }
-    init
-      .then(check(
-        releasedTicketValid(released(1, Set()))
-        and not(planUsesRepository(wrongEvaluationRepository, 1))
-      ))
-      .then(submit(CreateTicket(released(1, Set()))))
-      .then(check(decide(
-        graph,
-        DispatchTicket({ ticket: 1, source: { repository: 2, commit: 1001 } }),
-        reworkPolicy,
-      ) == TicketRefused(DispatchSourceRepositoryMismatch(1))))
-  }
-
-  run workOutputRepositoryContractTest = {
+  run opaqueResultContractTest = {
     val obligation = {
       task: workTaskIdentity(1, 1),
       definition: WORK,
-      source: source(1, 1001),
-      context: [],
+      contextRef: 1,
     }
     init.then(check(
-      hasExactGitOutput(validatedTaskResult(
-        obligation,
-        101,
-        [GitOutput(source(1, 1002))],
-        1,
-        [],
-      ))
-      and not(hasExactGitOutput(validatedTaskResult(
-        obligation,
-        102,
-        [GitOutput({ repository: 2, commit: 1002 })],
-        1,
-        [],
-      )))
-      and not(hasExactGitOutput(validatedTaskResult(
-        obligation,
-        103,
-        [],
-        1,
-        [],
-      )))
+      taskObligationValid(obligation)
+      and terminalValid(TaskResultProduced(validatedTaskResult(obligation, 101)))
+      and not(terminalValid(TaskResultProduced(validatedTaskResult(obligation, 0))))
     ))
+  }
+
+  run exactWorkObligationTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(check(decide(graph, ReportTaskTerminal(WorkResultReport({
+        ticket: 1,
+        result: validatedTaskResult({
+          task: workTaskIdentity(1, 1),
+          definition: WORK,
+          contextRef: 2,
+        }, 101),
+        acceptedSourceRef: 102,
+      })), reworkPolicy) == TicketRefused(TaskNotCurrent({
+        ticket: 1,
+        task: workTaskIdentity(1, 1),
+      }))))
   }
 
   run stageKeyContractTest = {
@@ -503,9 +352,9 @@ module ticket_tests {
       .then(check(graph.tickets.get(2).state == Pending))
       .then(submit(dispatch(1)))
       .then(reportWorkResult(1, 101))
-      .then(reportEvaluatorResult(1, 111, 1))
-      .then(reportEvaluatorResult(1, 112, 1))
-      .then(reportEvaluatorResult(1, 121, 1))
+      .then(reportEvaluatorResult(1, 111, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 112, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 121, EvaluatorPass))
       .then(reportFinalization(1, FinalizationSucceeded(131)))
       .then(check(ticketDone(1) and isReady(graph, 2)))
   }
@@ -566,12 +415,12 @@ module ticket_tests {
       .then(check(decidedCapabilities == [Set("macos-native", "xcode")]))
       .then(reportWorkResult(1, 902))
       .then(check(decidedCapabilities == [Set("linux"), Set("linux")]))
-      .then(reportEvaluatorResult(1, 903, -1))
-      .then(reportEvaluatorResult(1, 904, 1))
+      .then(reportEvaluatorResult(1, 903, EvaluatorFail))
+      .then(reportEvaluatorResult(1, 904, EvaluatorPass))
       .then(check(decidedCapabilities == [Set("macos-native", "xcode")]))
       .then(reportWorkResult(1, 905))
       .then(check(decidedCapabilities == [Set("linux"), Set("linux")]))
-      .then(reportEvaluatorResult(1, 906, 1))
+      .then(reportEvaluatorResult(1, 906, EvaluatorPass))
       .then(reportEvaluatorUnavailable(1, 907))
       .then(submit(ResumeTicket(1)))
       .then(check(decidedCapabilities == [Set("linux")]
@@ -618,52 +467,23 @@ module ticket_tests {
       .then(submit(CreateTicket(released(1, Set()))))
       .then(submit(updateTo(1, 1, revised(1, Set()))))
       .then(submit(dispatch(1)))
-      .then(check(decidedWorkContext == [151, 152, 103]))
+      .then(check(decidedWorkContexts == [1]))
       .then(check(ticketWorkCycle(1, 1) and ticketDefinition(1, revised(1, Set()))))
   }
 
-  run failedEvaluatorFindingsAreCarriedIntoReworkEntryTest = {
-    val detail = {
-      reason: SummaryReason(101),
-      resultManifest: 102,
-      findings: [{ id: 103, description: 104 }],
-    }
-    assert(failedEntries(11, Produced(EvaluatorFailed(detail))) == [{
-      evaluator: 11,
-      reason: SummaryReason(101),
-      resultManifest: 102,
-      findings: [{ id: 103, description: 104 }],
-    }])
-  }
-
-  run evaluatorFindingsReachTheNextWorkCycleTest = {
-    val duplicatedFindingIds = ReportTaskTerminal({
-      ticket: 1,
-      terminal: TaskResultProduced(validatedTaskResult({
-        task: evaluatorTaskIdentity(1, 1, 10, 1, 11),
-        definition: EVALUATOR,
-        source: source(1, 1301),
-        context: [1301],
-      }, 1311, [], -1, [
-        { id: 7, description: 1312 },
-        { id: 7, description: 1313 },
-      ])),
-    })
+  run failedEvaluatorResultRefReachesReworkTest = {
     init
+      .then(check(failedEntries(11, Produced(EvaluatorFailed(102))) == [
+        { evaluator: 11, resultRef: 102 },
+      ]))
       .then(submit(CreateTicket(released(1, Set()))))
       .then(submit(dispatch(1)))
-      .then(reportWorkResult(1, 1301))
-      .then(check(not(commandValid(duplicatedFindingIds))))
-      .then(reportEvaluatorResultWithFindings(1, 1311, -1, [
-        { id: 7, description: 1312 },
-        { id: 8, description: 1314 },
-      ]))
-      .then(reportEvaluatorResult(1, 1315, 1))
-      .then(check(ticketWorkCycle(1, 2)))
-      .then(check(workReworkFindings(1, 11) == [
-        { id: 7, description: 1312 },
-        { id: 8, description: 1314 },
-      ]))
+      .then(reportWorkResultWithSource(1, 1301, 1401))
+      .then(reportEvaluatorResult(1, 1311, EvaluatorFail))
+      .then(reportEvaluatorResult(1, 1315, EvaluatorPass))
+      .then(check(ticketWorkCycle(1, 2)
+        and workReworkRefs(1) == [{ evaluator: 11, resultRef: 1311 }]
+        and workUsesSource(1, 1401)))
   }
 
   run evaluationFailurePolicyTest = {
@@ -671,15 +491,15 @@ module ticket_tests {
       .then(submit(CreateTicket(released(1, Set()))))
       .then(submit(dispatch(1)))
       .then(reportWorkResult(1, 201))
-      .then(reportEvaluatorResult(1, 211, -1))
-      .then(reportEvaluatorResult(1, 212, 1))
+      .then(reportEvaluatorResult(1, 211, EvaluatorFail))
+      .then(reportEvaluatorResult(1, 212, EvaluatorPass))
       .then(check(ticketWorkCycle(1, 2)))
       .then(reportWorkResult(1, 202))
-      .then(reportEvaluatorResult(1, 221, -1))
+      .then(reportEvaluatorResult(1, 221, EvaluatorFail))
       .then(reportEvaluatorResultWithFailureDisposition(
         1,
         222,
-        1,
+        EvaluatorPass,
         escalatePolicy,
       ))
       .then(check(isEscalated(graph.tickets.get(1).state)))
@@ -692,13 +512,13 @@ module ticket_tests {
       .then(submit(CreateTicket(released(1, Set()))))
       .then(submit(dispatch(1)))
       .then(reportWorkResult(1, 301))
-      .then(reportEvaluatorResult(1, 311, 1))
+      .then(reportEvaluatorResult(1, 311, EvaluatorPass))
       .then(reportEvaluatorUnavailable(1, 312))
       .then(check(isEscalated(graph.tickets.get(1).state)))
       .then(submit(ResumeTicket(1)))
       .then(check(ticketEvaluationGeneration(1, 2)))
-      .then(reportEvaluatorResult(1, 313, 1))
-      .then(reportEvaluatorResult(1, 321, 1))
+      .then(reportEvaluatorResult(1, 313, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 321, EvaluatorPass))
       .then(reportFinalization(1, FinalizationSucceeded(331)))
       .then(check(ticketDone(1)))
   }
@@ -708,7 +528,7 @@ module ticket_tests {
       .then(submit(CreateTicket(released(1, Set()))))
       .then(submit(dispatch(1)))
       .then(reportWorkResult(1, 601))
-      .then(reportEvaluatorResult(1, 611, -1))
+      .then(reportEvaluatorResult(1, 611, EvaluatorFail))
       .then(reportEvaluatorUnavailable(1, 612))
       .then(check(ticketWorkCycle(1, 2)))
   }
@@ -718,7 +538,7 @@ module ticket_tests {
       .then(submit(CreateTicket(released(1, Set()))))
       .then(submit(dispatch(1)))
       .then(reportWorkResult(1, 701))
-      .then(reportEvaluatorResult(1, 711, 1))
+      .then(reportEvaluatorResult(1, 711, EvaluatorPass))
       .then(reportEvaluatorProcessFailed(1, 712))
       .then(check(isEscalated(graph.tickets.get(1).state)))
       .then(submit(ResumeTicket(1)))
@@ -740,19 +560,19 @@ module ticket_tests {
           }
         | _ => false
       }))
-      .then(check(decide(graph, ReportTaskTerminal({
+      .then(check(decide(graph, ReportTaskTerminal(EvaluationResultReport({
         ticket: 1,
-        terminal: TaskResultProduced(validatedTaskResult({
+        result: validatedTaskResult({
           task: evaluatorTaskIdentity(1, 1, 10, 1, 12),
           definition: EVALUATOR,
-          source: source(1, 701),
-          context: [701],
-        }, 713, [], 1, [])),
-      }), reworkPolicy) == TicketRefused(TaskNotCurrent({
+          contextRef: 701,
+        }, 713),
+        verdict: EvaluatorPass,
+      })), reworkPolicy) == TicketRefused(TaskNotCurrent({
         ticket: 1,
         task: evaluatorTaskIdentity(1, 1, 10, 1, 12),
       }))))
-      .then(reportEvaluatorResult(1, 714, 1))
+      .then(reportEvaluatorResult(1, 714, EvaluatorPass))
       .then(check(match graph.tickets.get(1).state {
         | Evaluation(evaluation) => match evaluation.state {
             | Running(progress) => progress.stage.stageIndex == 1
@@ -771,16 +591,16 @@ module ticket_tests {
       .then(submit(CreateTicket(released(1, Set()))))
       .then(submit(dispatch(1)))
       .then(reportWorkResult(1, 801))
-      .then(reportEvaluatorResult(1, 811, 1))
-      .then(check(decide(graph, ReportTaskTerminal({
+      .then(reportEvaluatorResult(1, 811, EvaluatorPass))
+      .then(check(decide(graph, ReportTaskTerminal(EvaluationResultReport({
         ticket: 1,
-        terminal: TaskResultProduced(validatedTaskResult({
+        result: validatedTaskResult({
           task: evaluatorTaskIdentity(1, 1, 10, 1, 11),
           definition: EVALUATOR,
-          source: source(1, 801),
-          context: [801],
-        }, 811, [], 1, [])),
-      }), reworkPolicy) == TicketRefused(TaskNotCurrent({
+          contextRef: 801,
+        }, 811),
+        verdict: EvaluatorPass,
+      })), reworkPolicy) == TicketRefused(TaskNotCurrent({
         ticket: 1,
         task: evaluatorTaskIdentity(1, 1, 10, 1, 11),
       }))))
@@ -791,7 +611,7 @@ module ticket_tests {
       .then(submit(CreateTicket(released(1, Set()))))
       .then(submit(dispatch(1)))
       .then(reportWorkResult(1, 901))
-      .then(reportEvaluatorResult(1, 911, 1))
+      .then(reportEvaluatorResult(1, 911, EvaluatorPass))
       .then(check(decide(
         graph,
         RevokeTicket(1),
@@ -812,15 +632,15 @@ module ticket_tests {
       .then(submit(CreateTicket(released(1, Set()))))
       .then(submit(dispatch(1)))
       .then(reportWorkResult(1, 401))
-      .then(reportEvaluatorResult(1, 411, 1))
-      .then(reportEvaluatorResult(1, 412, 1))
-      .then(reportEvaluatorResult(1, 421, 1))
+      .then(reportEvaluatorResult(1, 411, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 412, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 421, EvaluatorPass))
       .then(reportFinalization(1, FinalizationNeedsWork(431)))
       .then(check(ticketWorkCycle(1, 2)))
       .then(reportWorkResult(1, 402))
-      .then(reportEvaluatorResult(1, 441, 1))
-      .then(reportEvaluatorResult(1, 442, 1))
-      .then(reportEvaluatorResult(1, 451, 1))
+      .then(reportEvaluatorResult(1, 441, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 442, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 451, EvaluatorPass))
       .then(reportFinalization(1, FinalizationResultUnavailable(461)))
       .then(check(isEscalated(graph.tickets.get(1).state)))
       .then(submit(ResumeTicket(1)))
@@ -890,10 +710,10 @@ module ticket_tests {
     init
       .then(submit(CreateTicket(released(1, Set()))))
       .then(submit(dispatch(1)))
-      .then(reportWorkResult(1, 1001))
-      .then(reportEvaluatorResult(1, 1011, 1))
-      .then(reportEvaluatorResult(1, 1012, 1))
-      .then(reportEvaluatorResult(1, 1021, 1))
+      .then(reportWorkResultWithSource(1, 1001, 1099))
+      .then(reportEvaluatorResult(1, 1011, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 1012, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 1021, EvaluatorPass))
       .then(reportFinalization(1, FinalizationResultUnavailable(1031)))
       .then(check(graph.tickets.get(1).workCyclesStarted == 1
         and match lastDecision {
@@ -906,7 +726,7 @@ module ticket_tests {
           | TicketDecided(success) => success.obligations.length() == 1
             and (match success.obligations.nth(0) {
               | FinalizeTicket(request) => request.finalization.input == 1001
-                and request.finalization.source == source(1, 1001)
+                and request.finalization.source == 1099
               | _ => false
             })
           | _ => false
@@ -941,9 +761,9 @@ module ticket_tests {
       .then(submit(CreateTicket(released(1, Set()))))
       .then(submit(dispatch(1)))
       .then(reportWorkResult(1, 1201))
-      .then(reportEvaluatorResult(1, 1211, 1))
-      .then(reportEvaluatorResult(1, 1212, 1))
-      .then(reportEvaluatorResult(1, 1221, 1))
+      .then(reportEvaluatorResult(1, 1211, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 1212, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 1221, EvaluatorPass))
       .then(check(ticketFinalizing(1)))
       .then(check(not(commandValid(absentEvidence))))
       .then(check(
@@ -958,9 +778,9 @@ module ticket_tests {
       .then(submit(CreateTicket(released(3, Set()))))
       .then(submit(dispatch(1)))
       .then(reportWorkResult(1, 1101))
-      .then(reportEvaluatorResult(1, 1111, 1))
-      .then(reportEvaluatorResult(1, 1112, 1))
-      .then(reportEvaluatorResult(1, 1121, 1))
+      .then(reportEvaluatorResult(1, 1111, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 1112, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 1121, EvaluatorPass))
       .then(reportFinalization(1, FinalizationSucceeded(1131)))
       .then(submit(RevokeTicket(2)))
       .then(check(ticketDone(1) and graph.tickets.get(2).state == Revoked))
@@ -1021,8 +841,8 @@ module ticket_tests {
   action passWorkOne = reportWorkResult(1, 501)
   action failWorkOne = reportWorkProcessFailed(1, 508)
   action unavailableWorkOne = reportWorkExecutionUnavailable(1, 509)
-  action passEvaluatorOne = reportEvaluatorResult(1, 502, 1)
-  action failEvaluatorOne = reportEvaluatorResult(1, 503, -1)
+  action passEvaluatorOne = reportEvaluatorResult(1, 502, EvaluatorPass)
+  action failEvaluatorOne = reportEvaluatorResult(1, 503, EvaluatorFail)
   action unavailableEvaluatorOne = reportEvaluatorUnavailable(1, 504)
   action completeFinalizationOne =
     reportFinalization(1, FinalizationSucceeded(505))

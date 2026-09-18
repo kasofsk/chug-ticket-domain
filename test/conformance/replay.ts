@@ -1,5 +1,6 @@
 import * as t from "../../src/task.js";
 import * as k from "../../src/ticket.js";
+import * as e from "../../src/evaluation.js";
 import * as b from "../../src/testing.js";
 import { DecisionStep, NO_DECISION } from "../../src/itf.js";
 import { ConversionError, decision_from_itf } from "./convert.js";
@@ -46,9 +47,9 @@ function simulation(action: string, prior: k.TicketGraph): k.TicketCommand {
     case "unavailableWorkOne":
       return b.failure_command(prior, 1, 509, true, true);
     case "passEvaluatorOne":
-      return b.evaluator_result_command(prior, 1, 502, 1);
+      return b.evaluator_result_command(prior, 1, 502, new e.EvaluatorPass());
     case "failEvaluatorOne":
-      return b.evaluator_result_command(prior, 1, 503, -1);
+      return b.evaluator_result_command(prior, 1, 503, new e.EvaluatorFail());
     case "unavailableEvaluatorOne":
       return b.failure_command(prior, 1, 504, false, true);
     case "completeFinalizationOne":
@@ -95,9 +96,8 @@ function event_command(e: k.TicketEvent): Reconstructed {
       command = new k.ResumeTicket(e.ticket);
       break;
     case "TicketWorkResultAccepted":
-      command = b.terminal_command(
-        e.ticket,
-        new t.TaskResultProduced(e.result),
+      command = new k.ReportTaskTerminal(
+        new k.WorkResultReport(e.ticket, e.result, e.accepted_source_ref),
       );
       break;
     case "TicketWorkProcessFailed":
@@ -114,13 +114,13 @@ function event_command(e: k.TicketEvent): Reconstructed {
       break;
     case "TicketEvaluationFailureEscalated":
       policy = () => new k.EscalateEvaluationFailure();
-      command = b.terminal_command(e.ticket, e.terminal);
+      command = new k.ReportTaskTerminal(e.report);
       break;
     case "TicketEvaluationProgressed":
     case "TicketEvaluationPassed":
     case "TicketEvaluationBlocked":
     case "TicketEvaluationReworkStarted":
-      command = b.terminal_command(e.ticket, e.terminal);
+      command = new k.ReportTaskTerminal(e.report);
       break;
     case "TicketFinalizationSucceeded":
     case "TicketFinalizationNeedsWork":

@@ -18,25 +18,14 @@ module evaluation_protocol {
   type EvaluationInput = {
     ticket: int,
     workResult: int,
-    acceptedSource: WorkspaceSource
+    acceptedSourceRef: int
   }
 
-  type EvaluationReason = SummaryReason(int) | ExitCodeReason(int)
-
-  type EvaluationResultDetail = {
-    reason: EvaluationReason,
-    resultManifest: int
-  }
-
-  type EvaluationFailureDetail = {
-    reason: EvaluationReason,
-    resultManifest: int,
-    findings: List[EvaluationFinding]
-  }
+  type EvaluationVerdict = EvaluatorPass | EvaluatorFail
 
   type EvaluatorResult =
-    EvaluatorPassed(EvaluationResultDetail)
-    | EvaluatorFailed(EvaluationFailureDetail)
+    EvaluatorPassed(int)
+    | EvaluatorFailed(int)
 
   type EvaluatorStatus =
     Awaiting
@@ -44,17 +33,7 @@ module evaluation_protocol {
     | EvaluatorProcessFailed(int)
     | EvaluatorExecutionUnavailable(int)
 
-  type EvaluationReworkEntry = {
-    evaluator: int,
-    reason: EvaluationReason,
-    resultManifest: int,
-    findings: List[EvaluationFinding]
-  }
-
-  type EvaluationFinding = {
-    id: int,
-    description: int
-  }
+  type EvaluationReworkEntry = { evaluator: int, resultRef: int }
 
   type StageRun = {
     stageIndex: int,
@@ -292,32 +271,28 @@ module evaluation_protocol {
     | _ => current
   }
 
-  pure def decodeEvaluatorResult(result: ValidatedTaskResult): EvaluatorResult = {
-    val detail = {
-      reason: SummaryReason(result.value),
-      resultManifest: result.manifest,
+  pure def applyProduced(
+    current: EvaluationInstance,
+    task: TaskIdentity,
+    result: ValidatedTaskResult,
+    verdict: EvaluationVerdict,
+  ): EvaluationInstance = {
+    val interpreted = match verdict {
+      | EvaluatorPass => EvaluatorPassed(result.resultRef)
+      | EvaluatorFail => EvaluatorFailed(result.resultRef)
     }
-    if (result.value > 0) EvaluatorPassed(detail)
-    else EvaluatorFailed({
-      reason: detail.reason,
-      resultManifest: detail.resultManifest,
-      findings: result.findings.foldl([], (entries, finding) =>
-        entries.append({ id: finding.id, description: finding.description })),
-    })
+    if (currentTaskObligations(current).select(obligation =>
+      obligation == result.obligation).length() > 0)
+      concludeStage(reportProduced(current, task, interpreted))
+    else current
   }
 
-  pure def applyTerminal(
+  pure def applyFailure(
     current: EvaluationInstance,
     task: TaskIdentity,
     terminal: TaskTerminal,
-  ): EvaluationInstance = {
-    val recorded = match terminal {
-      | TaskResultProduced(result) =>
-          reportProduced(current, task, decodeEvaluatorResult(result))
-      | _ => reportWithoutResult(current, task, terminal)
-    }
-    concludeStage(recorded)
-  }
+  ): EvaluationInstance =
+    concludeStage(reportWithoutResult(current, task, terminal))
 
   pure def resumeBlocked(
     current: EvaluationInstance,
@@ -358,8 +333,7 @@ module evaluation_protocol {
         .foldl([], (tasks, entry) => tasks.append({
           task: taskIdentityFor(current, running.stage, entry.key),
           definition: entry.task,
-          source: current.input.acceptedSource,
-          context: [current.input.workResult],
+          contextRef: current.input.workResult,
         }))
     | _ => []
   }
@@ -369,26 +343,14 @@ module evaluation_protocol {
     status: EvaluatorStatus,
   ): List[EvaluationReworkEntry] = match status {
     | Produced(result) => match result {
-        | EvaluatorFailed(detail) => [{
+        | EvaluatorFailed(resultRef) => [{
             evaluator: evaluator,
-            reason: detail.reason,
-            resultManifest: detail.resultManifest,
-            findings: detail.findings,
+            resultRef: resultRef,
           }]
         | EvaluatorPassed(_) => []
       }
     | _ => []
   }
-
-  pure def findingValid(finding: EvaluationFinding): bool =
-    finding.id > 0 and finding.description > 0
-
-  pure def findingsValid(findings: List[EvaluationFinding]): bool =
-    findings.length() <= 32
-    and findings.indices().forall(index => findingValid(findings[index]))
-    and findings.indices().forall(left =>
-      findings.indices().forall(right =>
-        left == right or findings[left].id != findings[right].id))
 
   pure def reworkEntries(
     current: EvaluationInstance,
@@ -415,10 +377,8 @@ module evaluation_protocol {
       match status {
         | Awaiting => true
         | Produced(result) => match result {
-            | EvaluatorPassed(detail) =>
-                detail.resultManifest > 0
-            | EvaluatorFailed(detail) =>
-                detail.resultManifest > 0 and findingsValid(detail.findings)
+            | EvaluatorPassed(resultRef) => resultRef > 0
+            | EvaluatorFailed(resultRef) => resultRef > 0
           }
         | EvaluatorProcessFailed(evidence) => evidence > 0
         | EvaluatorExecutionUnavailable(evidence) => evidence > 0
@@ -509,22 +469,12 @@ module evaluation_protocol {
       })
     })
 
-  pure def planUsesRepository(plan: EvaluationPlan, repository: int): bool =
-    plan.stages.indices().forall(stageIndex =>
-      plan.stages[stageIndex].evaluators.indices().forall(evaluatorIndex =>
-        plan.stages[stageIndex].evaluators[evaluatorIndex].task
-          .executionRequirements.repository == repository))
-
   pure def invariant(current: EvaluationInstance): bool =
     current.workCycle > 0
     and current.input.ticket > 0
     and current.input.workResult > 0
-    and current.input.acceptedSource.repository > 0
-    and current.input.acceptedSource.commit > 0
+    and current.input.acceptedSourceRef > 0
     and planValid(current.plan)
-    and planUsesRepository(
-      current.plan,
-      current.input.acceptedSource.repository,
-    )
+
     and stateHistoryInvariant(current)
 }

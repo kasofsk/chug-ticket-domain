@@ -17,8 +17,8 @@ export const EvaluatorKey = (value: number): EvaluatorKey =>
 export type ContentRef = number & { readonly __brand: "ContentRef" };
 export const ContentRef = (value: number): ContentRef => value as ContentRef;
 
-export type Digest = number & { readonly __brand: "Digest" };
-export const Digest = (value: number): Digest => value as Digest;
+export type ContextRef = number & { readonly __brand: "ContextRef" };
+export const ContextRef = (value: number): ContextRef => value as ContextRef;
 
 export class WorkTaskId {
   readonly kind = "WorkTaskId";
@@ -47,28 +47,10 @@ export class EvaluationTaskId {
 
 export type TaskId = WorkTaskId | EvaluationTaskId;
 
-export class ReadRepository {
-  readonly kind = "ReadRepository";
-  constructor() {
-    Object.freeze(this);
-  }
-}
-
-export class PublishRepositoryResult {
-  readonly kind = "PublishRepositoryResult";
-  constructor() {
-    Object.freeze(this);
-  }
-}
-
-export type GitAccess = ReadRepository | PublishRepositoryResult;
-
 export class ExecutionRequirements {
   readonly kind = "ExecutionRequirements";
   readonly required_capabilities: readonly string[];
   constructor(
-    readonly repository: ContentRef,
-    readonly access: GitAccess,
     required_capabilities: readonly string[] | ReadonlySet<string> = [],
   ) {
     if (
@@ -88,25 +70,6 @@ export class ExecutionRequirements {
   }
 }
 
-export class WorkspaceSource {
-  readonly kind = "WorkspaceSource";
-  constructor(
-    readonly repository: ContentRef,
-    readonly commit: Digest,
-  ) {
-    Object.freeze(this);
-  }
-}
-
-export class GitOutput {
-  readonly kind = "GitOutput";
-  constructor(readonly output: WorkspaceSource) {
-    Object.freeze(this);
-  }
-}
-
-export type OutputRef = GitOutput;
-
 export class TaskDefinition {
   readonly kind = "TaskDefinition";
   constructor(
@@ -125,22 +88,9 @@ export class TaskObligation {
   constructor(
     readonly task: TaskId,
     readonly definition: TaskDefinition,
-    readonly source: WorkspaceSource,
-    readonly context: readonly ContentRef[],
+    readonly context_ref: ContextRef,
   ) {
-    this.context = Object.freeze([...context]);
     validate_TaskObligation(this);
-    Object.freeze(this);
-  }
-}
-
-export class ResultFinding {
-  readonly kind = "ResultFinding";
-  constructor(
-    readonly id: number,
-    readonly description: ContentRef,
-  ) {
-    validate_ResultFinding(this);
     Object.freeze(this);
   }
 }
@@ -149,30 +99,16 @@ export class ValidatedTaskResult {
   readonly kind = "ValidatedTaskResult";
   constructor(
     readonly obligation: TaskObligation,
-    readonly manifest: ContentRef,
-    readonly outputs: readonly OutputRef[],
-    readonly value: number,
-    readonly findings: readonly ResultFinding[],
+    readonly result_ref: ContentRef,
   ) {
-    this.findings = Object.freeze([...findings]);
-    this.outputs = Object.freeze([...outputs]);
     validate_ValidatedTaskResult(this);
     Object.freeze(this);
   }
   static produce(
     obligation: TaskObligation,
-    manifest: ContentRef,
-    outputs: readonly OutputRef[],
-    value: number,
-    findings: readonly ResultFinding[],
+    result_ref: ContentRef,
   ): ValidatedTaskResult {
-    return new ValidatedTaskResult(
-      obligation,
-      manifest,
-      outputs,
-      value,
-      findings,
-    );
+    return new ValidatedTaskResult(obligation, result_ref);
   }
 }
 
@@ -255,66 +191,19 @@ function validate_EvaluationTaskId(v: EvaluationTaskId): void {
 function validate_TaskDefinition(v: TaskDefinition): void {
   positive(v.workload, "workload must be present");
   positive(v.inputs, "inputs must be present");
-  positive(v.execution_requirements.repository, "repository must be present");
   positive(v.result_contract, "result contract must be present");
 }
 function validate_TaskObligation(v: TaskObligation): void {
-  positive(v.source.repository, "source repository must be present");
-  positive(v.source.commit, "source commit must be present");
-  if (v.source.repository !== v.definition.execution_requirements.repository)
-    throw new Error(
-      `source repository ${v.source.repository} is not the definition's repository ${v.definition.execution_requirements.repository}`,
-    );
-}
-export const FINDING_LIMIT = 32;
-function validate_ResultFinding(v: ResultFinding): void {
-  positive(v.id, "result finding id must be positive");
-  positive(v.description, "result finding description must be present");
+  positive(v.context_ref, "context reference must be present");
 }
 function validate_ValidatedTaskResult(v: ValidatedTaskResult): void {
-  positive(v.manifest, "result manifest must be present");
-  if (v.findings.length > FINDING_LIMIT)
-    throw new Error(
-      `at most ${FINDING_LIMIT} result findings: ${v.findings.length}`,
-    );
-  if (new Set(v.findings.map((f) => f.id)).size !== v.findings.length)
-    throw new Error("result finding ids must be unique");
+  positive(v.result_ref, "result reference must be present");
 }
 function validate_TaskFailure(v: TaskFailure): void {
   positive(v.evidence, "failure evidence must be present");
 }
 export function task_owner(task: TaskId): TicketId {
   return task.ticket;
-}
-export function reads_repository(
-  definition: TaskDefinition,
-  repository: ContentRef,
-): boolean {
-  return (
-    definition.execution_requirements.repository === repository &&
-    definition.execution_requirements.access instanceof ReadRepository
-  );
-}
-export function publishes_repository_result(
-  definition: TaskDefinition,
-  repository: ContentRef,
-): boolean {
-  return (
-    definition.execution_requirements.repository === repository &&
-    definition.execution_requirements.access instanceof PublishRepositoryResult
-  );
-}
-export function exact_git_output(
-  result: ValidatedTaskResult,
-): WorkspaceSource | null {
-  if (result.outputs.length !== 1) return null;
-  const output = result.outputs[0]!.output;
-  return output.repository ===
-    result.obligation.definition.execution_requirements.repository &&
-    output.repository === result.obligation.source.repository &&
-    output.commit > 0
-    ? output
-    : null;
 }
 export function terminal_task(terminal: TaskTerminal): TaskId {
   return terminal instanceof TaskResultProduced

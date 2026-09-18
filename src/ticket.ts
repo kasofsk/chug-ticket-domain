@@ -6,55 +6,37 @@ import {
   EvaluationPassed,
   EvaluationPlan,
   EvaluationReworkEntry,
+  EvaluationVerdict,
   Running,
-  apply_terminal,
+  apply_produced,
+  apply_failure,
   begin,
   current_task_obligations,
   evaluation_invariant,
   resume_blocked,
   rework_entries,
   task_current,
-  validate_plan,
+  plan_valid,
 } from "./evaluation.js";
 
 import {
   ContentRef,
+  ContextRef,
   CycleNumber,
   Generation,
   TaskDefinition,
   TaskId,
   TaskObligation,
   TaskProcessFailed,
-  TaskResultProduced,
-  TaskTerminal,
+  TaskExecutionUnavailable,
+  TaskFailure,
   TicketId,
   ValidatedTaskResult,
-  WorkspaceSource,
   WorkTaskId,
-  exact_git_output,
-  publishes_repository_result,
   task_owner,
-  terminal_task,
 } from "./task.js";
 
-export class AuthoredContent {
-  readonly kind = "AuthoredContent";
-  constructor(
-    readonly title: ContentRef,
-    readonly instructions: ContentRef,
-  ) {
-    Object.freeze(this);
-  }
-}
-
-export class LegacyContent {
-  readonly kind = "LegacyContent";
-  constructor(readonly content: ContentRef) {
-    Object.freeze(this);
-  }
-}
-
-export type ReleasedContent = AuthoredContent | LegacyContent;
+export type ReleasedContent = ContentRef;
 
 export class ReleasedWorkInput {
   readonly kind = "ReleasedWorkInput";
@@ -108,7 +90,7 @@ export class WorkExecution {
   readonly kind = "WorkExecution";
   constructor(
     readonly input: WorkInput,
-    readonly source: WorkspaceSource,
+    readonly source: ContentRef,
   ) {
     Object.freeze(this);
   }
@@ -120,7 +102,7 @@ export class FinalizationOperation {
     readonly work_cycle: CycleNumber,
     readonly generation: Generation,
     readonly input: ContentRef,
-    readonly source: WorkspaceSource,
+    readonly source: ContentRef,
   ) {
     Object.freeze(this);
   }
@@ -151,7 +133,7 @@ export class WorkEscalation {
   readonly kind = "WorkEscalation";
   constructor(
     readonly resume_input: WorkInput,
-    readonly source: WorkspaceSource,
+    readonly source: ContentRef,
     readonly evidence: ContentRef,
   ) {
     Object.freeze(this);
@@ -162,7 +144,7 @@ export class EvaluationFailureEscalation {
   readonly kind = "EvaluationFailureEscalation";
   constructor(
     readonly evidence: readonly EvaluationReworkEntry[],
-    readonly source: WorkspaceSource,
+    readonly source: ContentRef,
   ) {
     this.evidence = Object.freeze([...evidence]);
 
@@ -309,14 +291,81 @@ export class TicketGraph {
   }
 }
 
-export class TaskTerminalReport {
-  readonly kind = "TaskTerminalReport";
+export class ProcessFailure {
+  readonly kind = "ProcessFailure";
+  constructor() {
+    Object.freeze(this);
+  }
+}
+export class ExecutionUnavailableFailure {
+  readonly kind = "ExecutionUnavailableFailure";
+  constructor() {
+    Object.freeze(this);
+  }
+}
+export type FailureKind = ProcessFailure | ExecutionUnavailableFailure;
+
+export class WorkResultReport {
+  readonly kind = "WorkResultReport";
   constructor(
     readonly ticket: TicketId,
-    readonly terminal: TaskTerminal,
+    readonly result: ValidatedTaskResult,
+    readonly accepted_source_ref: ContentRef,
   ) {
     Object.freeze(this);
   }
+}
+export class EvaluationResultReport {
+  readonly kind = "EvaluationResultReport";
+  constructor(
+    readonly ticket: TicketId,
+    readonly result: ValidatedTaskResult,
+    readonly verdict: EvaluationVerdict,
+  ) {
+    Object.freeze(this);
+  }
+}
+export class TerminalFailureReport {
+  readonly kind = "TerminalFailureReport";
+  constructor(
+    readonly ticket: TicketId,
+    readonly failure: TaskFailure,
+    readonly kind_of_failure: FailureKind,
+  ) {
+    Object.freeze(this);
+  }
+}
+export type TaskTerminalReport =
+  WorkResultReport | EvaluationResultReport | TerminalFailureReport;
+
+export function report_ticket(report: TaskTerminalReport): TicketId {
+  return report.ticket;
+}
+export function report_task(report: TaskTerminalReport): TaskId {
+  return report instanceof TerminalFailureReport
+    ? report.failure.task
+    : report.result.obligation.task;
+}
+export function apply_evaluation_report(
+  evaluation: EvaluationInstance,
+  report: TaskTerminalReport,
+): EvaluationInstance {
+  if (report instanceof EvaluationResultReport)
+    return apply_produced(
+      evaluation,
+      report.result.obligation.task,
+      report.result,
+      report.verdict,
+    );
+  if (report instanceof TerminalFailureReport)
+    return apply_failure(
+      evaluation,
+      report.failure.task,
+      report.kind_of_failure instanceof ProcessFailure
+        ? new TaskProcessFailed(report.failure)
+        : new TaskExecutionUnavailable(report.failure),
+    );
+  return evaluation;
 }
 
 export class FinalizationSucceeded {
@@ -377,7 +426,7 @@ export class DispatchTicket {
   readonly kind = "DispatchTicket";
   constructor(
     readonly ticket: TicketId,
-    readonly source: WorkspaceSource,
+    readonly source: ContentRef,
   ) {
     Object.freeze(this);
   }
@@ -483,13 +532,6 @@ export class TicketDependenciesChanged {
   }
 }
 
-export class DispatchSourceRepositoryMismatch {
-  readonly kind = "DispatchSourceRepositoryMismatch";
-  constructor(readonly ticket: TicketId) {
-    Object.freeze(this);
-  }
-}
-
 export class DependenciesIncomplete {
   readonly kind = "DependenciesIncomplete";
   constructor(
@@ -524,13 +566,6 @@ export class TaskNotCurrent {
   }
 }
 
-export class WorkResultMissingExactGitOutput {
-  readonly kind = "WorkResultMissingExactGitOutput";
-  constructor(readonly ticket: TicketId) {
-    Object.freeze(this);
-  }
-}
-
 export class FinalizationNotCurrent {
   readonly kind = "FinalizationNotCurrent";
   constructor(
@@ -551,12 +586,10 @@ export type TicketRefusal =
   | TicketIdentityMismatch
   | TicketRevisionStale
   | TicketDependenciesChanged
-  | DispatchSourceRepositoryMismatch
   | DependenciesIncomplete
   | TicketNotRevocable
   | TicketNotResumable
   | TaskNotCurrent
-  | WorkResultMissingExactGitOutput
   | FinalizationNotCurrent;
 
 export class TicketCreated {
@@ -581,7 +614,7 @@ export class TicketDispatched {
   readonly kind = "TicketDispatched";
   constructor(
     readonly ticket: TicketId,
-    readonly source: WorkspaceSource,
+    readonly source: ContentRef,
   ) {
     Object.freeze(this);
   }
@@ -620,6 +653,7 @@ export class TicketWorkResultAccepted {
   constructor(
     readonly ticket: TicketId,
     readonly result: ValidatedTaskResult,
+    readonly accepted_source_ref: ContentRef,
   ) {
     Object.freeze(this);
   }
@@ -651,7 +685,7 @@ export class TicketEvaluationProgressed {
   readonly kind = "TicketEvaluationProgressed";
   constructor(
     readonly ticket: TicketId,
-    readonly terminal: TaskTerminal,
+    readonly report: TaskTerminalReport,
   ) {
     Object.freeze(this);
   }
@@ -661,7 +695,7 @@ export class TicketEvaluationPassed {
   readonly kind = "TicketEvaluationPassed";
   constructor(
     readonly ticket: TicketId,
-    readonly terminal: TaskTerminal,
+    readonly report: TaskTerminalReport,
   ) {
     Object.freeze(this);
   }
@@ -671,7 +705,7 @@ export class TicketEvaluationReworkStarted {
   readonly kind = "TicketEvaluationReworkStarted";
   constructor(
     readonly ticket: TicketId,
-    readonly terminal: TaskTerminal,
+    readonly report: TaskTerminalReport,
     readonly evidence: readonly EvaluationReworkEntry[],
   ) {
     this.evidence = Object.freeze([...evidence]);
@@ -684,7 +718,7 @@ export class TicketEvaluationFailureEscalated {
   readonly kind = "TicketEvaluationFailureEscalated";
   constructor(
     readonly ticket: TicketId,
-    readonly terminal: TaskTerminal,
+    readonly report: TaskTerminalReport,
     readonly evidence: readonly EvaluationReworkEntry[],
   ) {
     this.evidence = Object.freeze([...evidence]);
@@ -697,7 +731,7 @@ export class TicketEvaluationBlocked {
   readonly kind = "TicketEvaluationBlocked";
   constructor(
     readonly ticket: TicketId,
-    readonly terminal: TaskTerminal,
+    readonly report: TaskTerminalReport,
   ) {
     Object.freeze(this);
   }
@@ -835,13 +869,7 @@ export function is_escalated(s: TicketState): boolean {
   return s instanceof Escalated;
 }
 function _released_content_error(c: ReleasedContent): string | null {
-  if (c instanceof AuthoredContent) {
-    if (c.title <= 0) return `released title must be present: ${c.title}`;
-    if (c.instructions <= 0)
-      return `released instructions must be present: ${c.instructions}`;
-  } else if (c.content <= 0)
-    return `legacy released content must be present: ${c.content}`;
-  return null;
+  return c > 0 ? null : `released content must be present: ${c}`;
 }
 function _release_error(d: ReleasedTicket): string | null {
   if (d.id <= 0) return `ticket id must be present: ${d.id}`;
@@ -854,9 +882,8 @@ function _release_error(d: ReleasedTicket): string | null {
     .sort((a, b) => a - b);
   if (absent.length)
     return `dependencies must be present ticket ids: [${absent.join(", ")}]`;
-  const r = d.work_configuration.execution_requirements.repository;
-  if (!validate_plan(d.evaluation_plan, r))
-    return `evaluation plan is not releasable on repository ${r}`;
+  if (!plan_valid(d.evaluation_plan))
+    return "evaluation plan is not releasable";
   if (d.finalization_configuration <= 0)
     return `finalization configuration must be present: ${d.finalization_configuration}`;
   return null;
@@ -876,8 +903,17 @@ export function validate_command(c: TicketCommand): void {
     validate_release(c.definition);
   } else if (c instanceof DispatchTicket) {
     pos(c.ticket, "dispatched ticket must be present");
-    pos(c.source.repository, "dispatch source repository must be present");
-    pos(c.source.commit, "dispatch source commit must be present");
+    pos(c.source, "dispatch source must be present");
+  } else if (c instanceof ReportTaskTerminal) {
+    const report = c.report;
+    pos(report.ticket, "reported ticket must be present");
+    if (report instanceof WorkResultReport)
+      pos(
+        report.accepted_source_ref,
+        "accepted source reference must be present",
+      );
+    if (report instanceof TerminalFailureReport)
+      pos(report.failure.evidence, "failure evidence must be present");
   } else if (c instanceof ReportFinalizationResult) {
     pos(c.report.ticket, "reported ticket must be present");
     pos(c.report.work_cycle, "reported work cycle must be present");
@@ -919,36 +955,22 @@ export function finalization_rework_input(
 ): WorkInput {
   return new WorkInput(released_work_input(d), new FinalizationRework(e), []);
 }
-export function work_context(i: WorkInput): readonly ContentRef[] {
-  const c = i.released.content;
-  return [
-    ...(c instanceof AuthoredContent ? [c.title, c.instructions] : [c.content]),
-    i.released.input_bindings,
-    ...(i.cause instanceof InitialWork
-      ? []
-      : i.cause instanceof EvaluationRework
-        ? i.cause.entries.map((e) => e.result_manifest)
-        : [i.cause.evidence]),
-    ...i.retry_evidence,
-  ];
-}
 export function work_task_obligation(
   t: Ticket,
   n: CycleNumber,
-  s: WorkspaceSource,
+  s: ContentRef,
   i: WorkInput,
 ): TaskObligation {
   return new TaskObligation(
     work_task_identity(t.definition.id, n),
     t.definition.work_configuration,
-    s,
-    work_context(i),
+    ContextRef(n),
   );
 }
 export function execute_work(
   t: Ticket,
   n: CycleNumber,
-  s: WorkspaceSource,
+  s: ContentRef,
   i: WorkInput,
 ): Obligation {
   return new ExecuteTask(t.definition.id, work_task_obligation(t, n, s, i));
@@ -1065,11 +1087,6 @@ export function decide(
   }
   if (c instanceof DispatchTicket) {
     if (!is_pending(t.state)) return refuse(new TicketNotPending(id));
-    if (
-      c.source.repository !==
-      t.definition.work_configuration.execution_requirements.repository
-    )
-      return refuse(new DispatchSourceRepositoryMismatch(id));
     const incomplete = incomplete_dependencies(g, t);
     return incomplete.size
       ? refuse(new DependenciesIncomplete(id, incomplete))
@@ -1163,78 +1180,94 @@ export function decide(
       ),
     );
   }
-  const terminal = c.report.terminal,
-    task = terminal_task(terminal);
+  const report = c.report;
+  const task = report_task(report);
   if (
     t.state instanceof Work &&
-    equal(work_task_identity(id, CycleNumber(t.work_cycles_started)), task)
+    equal(work_task_identity(id, CycleNumber(t.work_cycles_started)), task) &&
+    (report instanceof TerminalFailureReport ||
+      (report instanceof WorkResultReport &&
+        equal(
+          report.result.obligation,
+          work_task_obligation(
+            t,
+            CycleNumber(t.work_cycles_started),
+            t.state.execution.source,
+            t.state.execution.input,
+          ),
+        )))
   ) {
-    if (terminal instanceof TaskResultProduced) {
-      const source = publishes_repository_result(
-        t.definition.work_configuration,
-        t.state.execution.source.repository,
-      )
-        ? exact_git_output(terminal.result)
-        : t.state.execution.source;
-      if (!source) return refuse(new WorkResultMissingExactGitOutput(id));
+    if (report instanceof WorkResultReport) {
       const e = begin(
         CycleNumber(t.work_cycles_started),
-        new EvaluationInput(id, terminal.result.manifest, source),
+        new EvaluationInput(
+          id,
+          report.result.result_ref,
+          report.accepted_source_ref,
+        ),
         t.definition.evaluation_plan,
       );
       return decided(
-        new TicketWorkResultAccepted(id, terminal.result),
+        new TicketWorkResultAccepted(
+          id,
+          report.result,
+          report.accepted_source_ref,
+        ),
         execute_evaluation_tasks(id, e),
       );
     }
     return decided(
-      terminal instanceof TaskProcessFailed
-        ? new TicketWorkProcessFailed(id, task, terminal.failure.evidence)
-        : new TicketWorkExecutionUnavailable(
-            id,
-            task,
-            terminal.failure.evidence,
-          ),
+      report.kind_of_failure instanceof ProcessFailure
+        ? new TicketWorkProcessFailed(id, task, report.failure.evidence)
+        : new TicketWorkExecutionUnavailable(id, task, report.failure.evidence),
     );
   }
-  if (t.state instanceof Evaluation && task_current(t.state.evaluation, task)) {
-    const prior = t.state.evaluation,
-      updated = apply_terminal(prior, task, terminal),
-      s = updated.state;
-    if (s instanceof Running)
+  if (
+    t.state instanceof Evaluation &&
+    task_current(t.state.evaluation, task) &&
+    (report instanceof TerminalFailureReport ||
+      (report instanceof EvaluationResultReport &&
+        current_task_obligations(t.state.evaluation).some((o) =>
+          equal(o, report.result.obligation),
+        )))
+  ) {
+    const prior = t.state.evaluation;
+    const updated = apply_evaluation_report(prior, report);
+    const state = updated.state;
+    if (state instanceof Running)
       return decided(
-        new TicketEvaluationProgressed(id, terminal),
+        new TicketEvaluationProgressed(id, report),
         prior.state instanceof Running &&
           prior.state.progress.stage.stage_index ===
-            s.progress.stage.stage_index
+            state.progress.stage.stage_index
           ? []
           : execute_evaluation_tasks(id, updated),
       );
-    if (s instanceof EvaluationPassed)
-      return decided(new TicketEvaluationPassed(id, terminal), [
+    if (state instanceof EvaluationPassed)
+      return decided(new TicketEvaluationPassed(id, report), [
         finalize(
           t,
           new FinalizationOperation(
             updated.work_cycle,
             Generation(1),
             updated.input.work_result,
-            updated.input.accepted_source,
+            updated.input.accepted_source_ref,
           ),
         ),
       ]);
-    if (s instanceof EvaluationBlocked)
-      return decided(new TicketEvaluationBlocked(id, terminal));
-    const entries = rework_entries(updated, s.completed_stages);
+    if (state instanceof EvaluationBlocked)
+      return decided(new TicketEvaluationBlocked(id, report));
+    const entries = rework_entries(updated, state.completed_stages);
     return policy(updated) instanceof ReworkEvaluationFailure
-      ? decided(new TicketEvaluationReworkStarted(id, terminal, entries), [
+      ? decided(new TicketEvaluationReworkStarted(id, report, entries), [
           execute_work(
             t,
             next_cycle_number(t),
-            updated.input.accepted_source,
+            updated.input.accepted_source_ref,
             evaluation_rework_input(t.definition, entries),
           ),
         ])
-      : decided(new TicketEvaluationFailureEscalated(id, terminal, entries));
+      : decided(new TicketEvaluationFailureEscalated(id, report, entries));
   }
   return refuse(new TaskNotCurrent(id, task));
 }
@@ -1250,7 +1283,7 @@ function _enter_work_cycle(
   g: TicketGraph,
   t: Ticket,
   i: WorkInput,
-  s: WorkspaceSource,
+  s: ContentRef,
 ): TicketGraph {
   return _update_ticket(
     g,
@@ -1335,24 +1368,32 @@ function _evolve(g: TicketGraph, f: TicketEvent): TicketGraph | null {
         )
       : null;
   if (f instanceof TicketWorkResultAccepted) {
-    if (!(s instanceof Work)) return null;
-    const source = publishes_repository_result(
-      t.definition.work_configuration,
-      s.execution.source.repository,
+    if (
+      !(s instanceof Work) ||
+      !equal(
+        f.result.obligation,
+        work_task_obligation(
+          t,
+          CycleNumber(t.work_cycles_started),
+          s.execution.source,
+          s.execution.input,
+        ),
+      )
     )
-      ? exact_git_output(f.result)
-      : s.execution.source;
-    return source
-      ? put(
-          new Evaluation(
-            begin(
-              CycleNumber(t.work_cycles_started),
-              new EvaluationInput(f.ticket, f.result.manifest, source),
-              t.definition.evaluation_plan,
-            ),
+      return null;
+    return put(
+      new Evaluation(
+        begin(
+          CycleNumber(t.work_cycles_started),
+          new EvaluationInput(
+            f.ticket,
+            f.result.result_ref,
+            f.accepted_source_ref,
           ),
-        )
-      : null;
+          t.definition.evaluation_plan,
+        ),
+      ),
+    );
   }
   if (
     f instanceof TicketWorkProcessFailed ||
@@ -1400,14 +1441,10 @@ function _evolve(g: TicketGraph, f: TicketEvent): TicketGraph | null {
   }
   if (
     !(s instanceof Evaluation) ||
-    !task_current(s.evaluation, terminal_task(f.terminal))
+    !task_current(s.evaluation, report_task(f.report))
   )
     return null;
-  const updated = apply_terminal(
-    s.evaluation,
-    terminal_task(f.terminal),
-    f.terminal,
-  );
+  const updated = apply_evaluation_report(s.evaluation, f.report);
   if (f instanceof TicketEvaluationProgressed)
     return updated.state instanceof Running
       ? put(new Evaluation(updated))
@@ -1420,7 +1457,7 @@ function _evolve(g: TicketGraph, f: TicketEvent): TicketGraph | null {
               updated.work_cycle,
               Generation(1),
               updated.input.work_result,
-              updated.input.accepted_source,
+              updated.input.accepted_source_ref,
             ),
           ),
         )
@@ -1435,14 +1472,14 @@ function _evolve(g: TicketGraph, f: TicketEvent): TicketGraph | null {
       g,
       t,
       evaluation_rework_input(t.definition, f.evidence),
-      s.evaluation.input.accepted_source,
+      s.evaluation.input.accepted_source_ref,
     );
   return put(
     new Escalated(
       new EvaluationFailureEscalated(
         new EvaluationFailureEscalation(
           f.evidence,
-          s.evaluation.input.accepted_source,
+          s.evaluation.input.accepted_source_ref,
         ),
       ),
     ),
@@ -1475,7 +1512,7 @@ function _work_input_valid(i: WorkInput): boolean {
     (i.cause instanceof InitialWork ||
       (i.cause instanceof EvaluationRework
         ? i.cause.entries.length > 0 &&
-          i.cause.entries.every((e) => e.evaluator > 0 && e.result_manifest > 0)
+          i.cause.entries.every((e) => e.evaluator > 0 && e.result_ref > 0)
         : i.cause.evidence > 0))
   );
 }
@@ -1485,7 +1522,6 @@ function _work_input_matches_ticket(t: Ticket, i: WorkInput): boolean {
   );
 }
 function _escalation_valid(t: Ticket, e: Escalation): boolean {
-  const r = t.definition.work_configuration.execution_requirements.repository;
   if (
     e instanceof WorkFailureEscalated ||
     e instanceof WorkExecutionUnavailableEscalated
@@ -1493,8 +1529,7 @@ function _escalation_valid(t: Ticket, e: Escalation): boolean {
     const f = e.escalation;
     return (
       _work_input_matches_ticket(t, f.resume_input) &&
-      f.source.repository === r &&
-      f.source.commit > 0 &&
+      f.source > 0 &&
       f.evidence > 0
     );
   }
@@ -1504,9 +1539,7 @@ function _escalation_valid(t: Ticket, e: Escalation): boolean {
       _work_input_matches_ticket(
         t,
         evaluation_rework_input(t.definition, f.evidence),
-      ) &&
-      f.source.repository === r &&
-      f.source.commit > 0
+      ) && f.source > 0
     );
   }
   if (e instanceof EvaluationBlockedEscalated) {
@@ -1524,8 +1557,7 @@ function _escalation_valid(t: Ticket, e: Escalation): boolean {
     o.work_cycle === t.work_cycles_started &&
     o.generation > 0 &&
     o.input > 0 &&
-    o.source.repository === r &&
-    o.source.commit > 0 &&
+    o.source > 0 &&
     f.evidence > 0
   );
 }
@@ -1536,15 +1568,13 @@ function _ticket_invariant(t: Ticket): boolean {
     t.work_cycles_started < 0
   )
     return false;
-  const s = t.state,
-    r = t.definition.work_configuration.execution_requirements.repository;
+  const s = t.state;
   if (s instanceof Pending) return t.work_cycles_started === 0;
   if (s instanceof Work)
     return (
       t.work_cycles_started > 0 &&
       _work_input_matches_ticket(t, s.execution.input) &&
-      s.execution.source.repository === r &&
-      s.execution.source.commit > 0
+      s.execution.source > 0
     );
   if (s instanceof Evaluation) {
     const e = s.evaluation;
@@ -1552,7 +1582,7 @@ function _ticket_invariant(t: Ticket): boolean {
       evaluation_invariant(e) &&
       e.input.ticket === t.definition.id &&
       e.work_cycle === t.work_cycles_started &&
-      e.input.accepted_source.repository === r
+      e.input.accepted_source_ref > 0
     );
   }
   if (s instanceof Finalization) {
@@ -1561,8 +1591,7 @@ function _ticket_invariant(t: Ticket): boolean {
       o.work_cycle === t.work_cycles_started &&
       o.generation > 0 &&
       o.input > 0 &&
-      o.source.repository === r &&
-      o.source.commit > 0
+      o.source > 0
     );
   }
   if (s instanceof Escalated) return _escalation_valid(t, s.escalation);
@@ -1598,8 +1627,7 @@ function _obligation_valid(o: Obligation): boolean {
     f.generation > 0 &&
     o.configuration > 0 &&
     f.input > 0 &&
-    f.source.repository > 0 &&
-    f.source.commit > 0
+    f.source > 0
   );
 }
 function _obligation_agrees(

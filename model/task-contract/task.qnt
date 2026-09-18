@@ -13,17 +13,7 @@ module task_contract {
     WorkTask(WorkTaskIdentity)
     | EvaluationTask(EvaluationTaskIdentity)
 
-  type GitAccess = ReadRepository | PublishRepositoryResult
-
-  type ExecutionRequirements = {
-    repository: int,
-    access: GitAccess,
-    requiredCapabilities: Set[str],
-  }
-
-  type WorkspaceSource = { repository: int, commit: int }
-
-  type OutputRef = GitOutput(WorkspaceSource)
+  type ExecutionRequirements = { requiredCapabilities: Set[str] }
 
   type TaskDefinition = {
     workload: int,
@@ -32,27 +22,19 @@ module task_contract {
     resultContract: int
   }
 
+  // A context reference is scoped by the obligation's logical task identity.
   type TaskObligation = {
     task: TaskIdentity,
     definition: TaskDefinition,
-    source: WorkspaceSource,
-    context: List[int]
+    contextRef: int
   }
-
-  type ResultFinding = { id: int, description: int }
 
   type ValidatedTaskResult = {
     obligation: TaskObligation,
-    manifest: int,
-    outputs: List[OutputRef],
-    value: int,
-    findings: List[ResultFinding]
+    resultRef: int
   }
 
-  type TaskFailure = {
-    task: TaskIdentity,
-    evidence: int
-  }
+  type TaskFailure = { task: TaskIdentity, evidence: int }
 
   type TaskTerminal =
     TaskResultProduced(ValidatedTaskResult)
@@ -77,56 +59,21 @@ module task_contract {
   pure def taskDefinitionValid(definition: TaskDefinition): bool =
     definition.workload > 0
     and definition.inputs > 0
-    and definition.executionRequirements.repository > 0
     and definition.executionRequirements.requiredCapabilities.forall(name => name != "")
     and definition.resultContract > 0
-
-  pure def readsRepository(definition: TaskDefinition, repository: int): bool =
-    definition.executionRequirements.repository == repository
-    and definition.executionRequirements.access == ReadRepository
-
-  pure def publishesRepositoryResult(
-    definition: TaskDefinition,
-    repository: int,
-  ): bool =
-    definition.executionRequirements.repository == repository
-    and definition.executionRequirements.access == PublishRepositoryResult
 
   pure def taskObligationValid(obligation: TaskObligation): bool =
     taskIdentityValid(obligation.task)
     and taskDefinitionValid(obligation.definition)
-    and obligation.source.repository > 0
-    and obligation.source.commit > 0
-    and obligation.source.repository
-      == obligation.definition.executionRequirements.repository
+    and obligation.contextRef > 0
 
   pure def validatedTaskResult(
     obligation: TaskObligation,
-    manifest: int,
-    outputs: List[OutputRef],
-    value: int,
-    findings: List[ResultFinding],
+    resultRef: int,
   ): ValidatedTaskResult = {
     obligation: obligation,
-    manifest: manifest,
-    outputs: outputs,
-    value: value,
-    findings: findings,
+    resultRef: resultRef,
   }
-
-  pure def exactGitOutput(result: ValidatedTaskResult): WorkspaceSource =
-    match result.outputs[0] {
-      | GitOutput(output) => output
-    }
-
-  pure def hasExactGitOutput(result: ValidatedTaskResult): bool =
-    result.outputs.length() == 1
-    and match result.outputs[0] {
-      | GitOutput(output) => output.repository
-          == result.obligation.definition.executionRequirements.repository
-        and output.repository == result.obligation.source.repository
-        and output.commit > 0
-    }
 
   pure def terminalTask(terminal: TaskTerminal): TaskIdentity = match terminal {
     | TaskResultProduced(result) => result.obligation.task
@@ -134,20 +81,9 @@ module task_contract {
     | TaskExecutionUnavailable(failure) => failure.task
   }
 
-  pure def resultFindingValid(finding: ResultFinding): bool =
-    finding.id > 0 and finding.description > 0
-
-  pure def resultFindingsValid(findings: List[ResultFinding]): bool =
-    findings.length() <= 32
-    and findings.indices().forall(index => resultFindingValid(findings[index]))
-    and findings.indices().forall(left =>
-      findings.indices().forall(right =>
-        left == right or findings[left].id != findings[right].id))
-
   pure def terminalValid(terminal: TaskTerminal): bool = match terminal {
     | TaskResultProduced(result) =>
-        taskObligationValid(result.obligation) and result.manifest > 0
-        and resultFindingsValid(result.findings)
+        taskObligationValid(result.obligation) and result.resultRef > 0
     | TaskProcessFailed(failure) =>
         taskIdentityValid(failure.task) and failure.evidence > 0
     | TaskExecutionUnavailable(failure) =>

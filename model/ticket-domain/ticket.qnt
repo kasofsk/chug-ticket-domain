@@ -2,9 +2,7 @@ module ticket_domain {
   import task_contract.* from "../task-contract/task"
   import evaluation_protocol.* from "evaluation/evaluation"
 
-  type ReleasedContent =
-    AuthoredReleasedContent({ title: int, instructions: int })
-    | LegacyReleasedContent(int)
+  type ReleasedContent = int
 
   type ReleasedWorkInput = {
     content: ReleasedContent,
@@ -22,13 +20,13 @@ module ticket_domain {
     retryEvidence: List[int]
   }
 
-  type WorkExecution = { input: WorkInput, source: WorkspaceSource }
+  type WorkExecution = { input: WorkInput, source: int }
 
   type FinalizationOperation = {
     workCycle: int,
     generation: int,
     input: int,
-    source: WorkspaceSource
+    source: int
   }
 
   type EvaluationFailureDisposition =
@@ -39,13 +37,13 @@ module ticket_domain {
 
   type WorkEscalation = {
     resumeInput: WorkInput,
-    source: WorkspaceSource,
+    source: int,
     evidence: int
   }
 
   type EvaluationFailureEscalation = {
     evidence: List[EvaluationReworkEntry],
-    source: WorkspaceSource
+    source: int
   }
 
   type FinalizationEscalation = {
@@ -88,10 +86,12 @@ module ticket_domain {
 
   type TicketGraph = { tickets: int -> Ticket }
 
-  type TaskTerminalReport = {
-    ticket: int,
-    terminal: TaskTerminal
-  }
+  type FailureKind = ProcessFailure | ExecutionUnavailableFailure
+
+  type TaskTerminalReport =
+    WorkResultReport({ ticket: int, result: ValidatedTaskResult, acceptedSourceRef: int })
+    | EvaluationResultReport({ ticket: int, result: ValidatedTaskResult, verdict: EvaluationVerdict })
+    | TerminalFailureReport({ ticket: int, failure: TaskFailure, kind: FailureKind })
 
   type FinalizationResult =
     FinalizationSucceeded(int)
@@ -112,7 +112,7 @@ module ticket_domain {
         expectedRevision: int,
         definition: ReleasedTicket
       })
-    | DispatchTicket({ ticket: int, source: WorkspaceSource })
+    | DispatchTicket({ ticket: int, source: int })
     | RevokeTicket(int)
     | ResumeTicket(int)
     | ReportTaskTerminal(TaskTerminalReport)
@@ -149,28 +149,27 @@ module ticket_domain {
     | TicketIdentityMismatch(int)
     | TicketRevisionStale(StaleRevision)
     | TicketDependenciesChanged(int)
-    | DispatchSourceRepositoryMismatch(int)
     | DependenciesIncomplete(IncompleteDependencies)
     | TicketNotRevocable(int)
     | TicketNotResumable(int)
     | TaskNotCurrent(CurrentTaskRefusal)
-    | WorkResultMissingExactGitOutput(int)
     | FinalizationNotCurrent(CurrentFinalizationRefusal)
 
   type TaskTerminalFact = {
     ticket: int,
-    terminal: TaskTerminal
+    report: TaskTerminalReport
   }
 
   type EvaluationReworkFact = {
     ticket: int,
-    terminal: TaskTerminal,
+    report: TaskTerminalReport,
     evidence: List[EvaluationReworkEntry]
   }
 
   type WorkResultAcceptedEvent = {
     ticket: int,
-    result: ValidatedTaskResult
+    result: ValidatedTaskResult,
+    acceptedSourceRef: int
   }
 
   type WorkFailureEvent = {
@@ -195,7 +194,7 @@ module ticket_domain {
   type TicketEvent =
     TicketCreated(ReleasedTicket)
     | TicketUpdated(TicketUpdate)
-    | TicketDispatched({ ticket: int, source: WorkspaceSource })
+    | TicketDispatched({ ticket: int, source: int })
     | TicketRevoked(int)
     | TicketWorkResumed(int)
     | TicketEvaluationResumed(int)
@@ -276,10 +275,6 @@ module ticket_domain {
     and definition.dependencies.forall(dependency => dependency > 0)
     and taskDefinitionValid(definition.workConfiguration)
     and planValid(definition.evaluationPlan)
-    and planUsesRepository(
-      definition.evaluationPlan,
-      definition.workConfiguration.executionRequirements.repository,
-    )
     and definition.finalizationConfiguration > 0
 
   pure def finalizationResultValid(result: FinalizationResult): bool =
@@ -294,15 +289,56 @@ module ticket_domain {
     | UpdateTicket(update) => update.ticket > 0
         and update.expectedRevision > 0
         and releasedTicketValid(update.definition)
-    | DispatchTicket(dispatch) => dispatch.ticket > 0
-        and dispatch.source.repository > 0
-        and dispatch.source.commit > 0
-    | ReportTaskTerminal(report) => terminalValid(report.terminal)
+    | DispatchTicket(dispatch) => dispatch.ticket > 0 and dispatch.source > 0
+    | ReportTaskTerminal(report) => reportValid(report)
     | ReportFinalizationResult(report) => report.ticket > 0
         and report.workCycle > 0
         and report.generation > 0
         and finalizationResultValid(report.result)
     | _ => true
+  }
+
+  pure def reportTicket(report: TaskTerminalReport): int = match report {
+    | WorkResultReport(work) => work.ticket
+    | EvaluationResultReport(evaluation) => evaluation.ticket
+    | TerminalFailureReport(failure) => failure.ticket
+  }
+
+  pure def reportTask(report: TaskTerminalReport): TaskIdentity = match report {
+    | WorkResultReport(work) => work.result.obligation.task
+    | EvaluationResultReport(evaluation) => evaluation.result.obligation.task
+    | TerminalFailureReport(failure) => failure.failure.task
+  }
+
+  pure def reportValid(report: TaskTerminalReport): bool = match report {
+    | WorkResultReport(work) => work.ticket > 0 and work.acceptedSourceRef > 0
+        and terminalValid(TaskResultProduced(work.result))
+    | EvaluationResultReport(evaluation) => evaluation.ticket > 0
+        and terminalValid(TaskResultProduced(evaluation.result))
+    | TerminalFailureReport(failure) => failure.ticket > 0
+        and failure.failure.evidence > 0
+        and taskIdentityValid(failure.failure.task)
+  }
+
+  pure def applyEvaluationReport(
+    evaluation: EvaluationInstance,
+    report: TaskTerminalReport,
+  ): EvaluationInstance = match report {
+    | EvaluationResultReport(produced) => applyProduced(
+        evaluation,
+        produced.result.obligation.task,
+        produced.result,
+        produced.verdict,
+      )
+    | TerminalFailureReport(failure) => applyFailure(
+        evaluation,
+        failure.failure.task,
+        match failure.kind {
+          | ProcessFailure => TaskProcessFailed(failure.failure)
+          | ExecutionUnavailableFailure => TaskExecutionUnavailable(failure.failure)
+        },
+      )
+    | WorkResultReport(_) => evaluation
   }
 
   pure def workTaskIdentity(ticket: int, cycle: int): TaskIdentity =
@@ -313,11 +349,7 @@ module ticket_domain {
     inputBindings: definition.inputBindings,
   }
 
-  pure def releasedContentValid(content: ReleasedContent): bool = match content {
-    | AuthoredReleasedContent(authored) =>
-        authored.title > 0 and authored.instructions > 0
-    | LegacyReleasedContent(legacy) => legacy > 0
-  }
+  pure def releasedContentValid(content: ReleasedContent): bool = content > 0
 
   pure def initialWorkInput(definition: ReleasedTicket): WorkInput = {
     released: releasedWorkInput(definition),
@@ -350,37 +382,21 @@ module ticket_domain {
     retryEvidence: [],
   }
 
-  pure def workContext(input: WorkInput): List[int] =
-    (match input.released.content {
-      | AuthoredReleasedContent(authored) => [authored.title, authored.instructions]
-      | LegacyReleasedContent(legacy) => [legacy]
-    })
-      .append(input.released.inputBindings)
-      .concat(match input.cause {
-        | InitialWork => []
-        | EvaluationRework(entries) =>
-            entries.foldl([], (manifests, entry) =>
-              manifests.append(entry.resultManifest))
-        | FinalizationRework(evidence) => [evidence]
-      })
-      .concat(input.retryEvidence)
-
   pure def workTaskObligation(
     ticket: Ticket,
     cycleNumber: int,
-    source: WorkspaceSource,
+    source: int,
     input: WorkInput,
   ): TaskObligation = {
     task: workTaskIdentity(ticket.definition.id, cycleNumber),
     definition: ticket.definition.workConfiguration,
-    source: source,
-    context: workContext(input),
+    contextRef: cycleNumber,
   }
 
   pure def executeWork(
     ticket: Ticket,
     cycleNumber: int,
-    source: WorkspaceSource,
+    source: int,
     input: WorkInput,
   ): Obligation = ExecuteTask({
     ticket: ticket.definition.id,
@@ -509,7 +525,7 @@ module ticket_domain {
 
   pure def decideDispatch(
     graph: TicketGraph,
-    dispatch: { ticket: int, source: WorkspaceSource },
+    dispatch: { ticket: int, source: int },
   ): TicketDecision = {
     val ticketId = dispatch.ticket
     if (not(graph.tickets.keys().contains(ticketId)))
@@ -517,9 +533,6 @@ module ticket_domain {
     else {
       val ticket = graph.tickets.get(ticketId)
       if (not(isPending(ticket.state))) refused(TicketNotPending(ticketId))
-      else if (dispatch.source.repository
-        != ticket.definition.workConfiguration.executionRequirements.repository)
-        refused(DispatchSourceRepositoryMismatch(ticketId))
       else {
         val incomplete = incompleteDependencies(graph, ticket)
         if (incomplete != Set()) refused(DependenciesIncomplete({
@@ -613,39 +626,35 @@ module ticket_domain {
   pure def decideWorkTerminal(
     ticket: Ticket,
     report: TaskTerminalReport,
-    work: WorkExecution,
-  ): TicketDecision = match report.terminal {
-    | TaskResultProduced(result) => {
-        val publishes = publishesRepositoryResult(
-          ticket.definition.workConfiguration, work.source.repository)
-        if (publishes and not(hasExactGitOutput(result)))
-          refused(WorkResultMissingExactGitOutput(report.ticket))
-        else {
+  ): TicketDecision = match report {
+    | WorkResultReport(produced) => {
         val evaluation = begin(ticket.workCyclesStarted, {
           ticket: ticket.definition.id,
-          workResult: result.manifest,
-          acceptedSource: if (publishes) exactGitOutput(result) else work.source,
+          workResult: produced.result.resultRef,
+          acceptedSourceRef: produced.acceptedSourceRef,
         }, ticket.definition.evaluationPlan)
         decided(TicketWorkResultAccepted({
-          ticket: report.ticket,
-          result: result,
-        }), executeEvaluationTasks(report.ticket, evaluation))
-        }
+          ticket: produced.ticket,
+          result: produced.result,
+          acceptedSourceRef: produced.acceptedSourceRef,
+        }), executeEvaluationTasks(produced.ticket, evaluation))
       }
-    | TaskProcessFailed(failure) => {
-        decided(TicketWorkProcessFailed({
-          ticket: report.ticket,
-          task: failure.task,
-          evidence: failure.evidence,
-        }), [])
+    | TerminalFailureReport(failure) => match failure.kind {
+        | ProcessFailure => decided(TicketWorkProcessFailed({
+            ticket: failure.ticket,
+            task: failure.failure.task,
+            evidence: failure.failure.evidence,
+          }), [])
+        | ExecutionUnavailableFailure => decided(TicketWorkExecutionUnavailable({
+            ticket: failure.ticket,
+            task: failure.failure.task,
+            evidence: failure.failure.evidence,
+          }), [])
       }
-    | TaskExecutionUnavailable(failure) => {
-        decided(TicketWorkExecutionUnavailable({
-          ticket: report.ticket,
-          task: failure.task,
-          evidence: failure.evidence,
-        }), [])
-      }
+    | EvaluationResultReport(evaluation) => refused(TaskNotCurrent({
+        ticket: evaluation.ticket,
+        task: evaluation.result.obligation.task,
+      }))
   }
 
   pure def runningStageIndex(evaluation: EvaluationInstance): int =
@@ -660,16 +669,15 @@ module ticket_domain {
     report: TaskTerminalReport,
     failurePolicy: EvaluationFailurePolicy,
   ): TicketDecision = {
-    val task = terminalTask(report.terminal)
     val priorStage = runningStageIndex(evaluation)
-    val updated = applyTerminal(evaluation, task, report.terminal)
+    val updated = applyEvaluationReport(evaluation, report)
     match updated.state {
       | Running(progress) => {
           val obligations = if (progress.stage.stageIndex == priorStage) []
-            else executeEvaluationTasks(report.ticket, updated)
+            else executeEvaluationTasks(reportTicket(report), updated)
           decided(TicketEvaluationProgressed({
-            ticket: report.ticket,
-            terminal: report.terminal,
+            ticket: reportTicket(report),
+            report: report,
           }), obligations)
         }
       | EvaluationPassed(_) => {
@@ -677,11 +685,11 @@ module ticket_domain {
             workCycle: updated.workCycle,
             generation: 1,
             input: updated.input.workResult,
-            source: updated.input.acceptedSource,
+            source: updated.input.acceptedSourceRef,
           }
           decided(TicketEvaluationPassed({
-            ticket: report.ticket,
-            terminal: report.terminal,
+            ticket: reportTicket(report),
+            report: report,
           }), [finalize(ticket, finalization)])
         }
       | EvaluationFailed(completedStages) => {
@@ -689,21 +697,21 @@ module ticket_domain {
           match failurePolicy(updated) {
             | ReworkEvaluationFailure => decided(
                 TicketEvaluationReworkStarted({
-                  ticket: report.ticket,
-                  terminal: report.terminal,
+                  ticket: reportTicket(report),
+                  report: report,
                   evidence: entries,
                 }),
                 [executeWork(
                   ticket,
                   nextCycleNumber(ticket),
-                  updated.input.acceptedSource,
+                  updated.input.acceptedSourceRef,
                   evaluationReworkInput(ticket.definition, entries),
                 )],
               )
             | EscalateEvaluationFailure => decided(
                 TicketEvaluationFailureEscalated({
-                  ticket: report.ticket,
-                  terminal: report.terminal,
+                  ticket: reportTicket(report),
+                  report: report,
                   evidence: entries,
                 }),
                 [],
@@ -712,8 +720,8 @@ module ticket_domain {
         }
       | EvaluationBlocked(_) => {
           decided(TicketEvaluationBlocked({
-            ticket: report.ticket,
-            terminal: report.terminal,
+            ticket: reportTicket(report),
+            report: report,
           }), [])
         }
     }
@@ -724,23 +732,36 @@ module ticket_domain {
     report: TaskTerminalReport,
     failurePolicy: EvaluationFailurePolicy,
   ): TicketDecision =
-    if (not(graph.tickets.keys().contains(report.ticket)))
-      refused(TicketNotFound(report.ticket))
+    if (not(graph.tickets.keys().contains(reportTicket(report))))
+      refused(TicketNotFound(reportTicket(report)))
     else {
-      val ticket = graph.tickets.get(report.ticket)
-      val task = terminalTask(report.terminal)
+      val ticket = graph.tickets.get(reportTicket(report))
+      val task = reportTask(report)
       match ticket.state {
         | Work(work) => if (
             workTaskIdentity(
               ticket.definition.id,
               ticket.workCyclesStarted,
-            ) == task)
-            decideWorkTerminal(ticket, report, work)
+            ) == task
+            and match report {
+              | WorkResultReport(produced) => produced.result.obligation ==
+                  workTaskObligation(ticket, ticket.workCyclesStarted, work.source, work.input)
+              | TerminalFailureReport(_) => true
+              | EvaluationResultReport(_) => false
+            })
+            decideWorkTerminal(ticket, report)
           else refused(TaskNotCurrent({
-            ticket: report.ticket,
+            ticket: reportTicket(report),
             task: task,
           }))
-        | Evaluation(evaluation) => if (taskCurrent(evaluation, task))
+        | Evaluation(evaluation) => if (taskCurrent(evaluation, task)
+            and match report {
+              | EvaluationResultReport(produced) =>
+                  currentTaskObligations(evaluation).select(obligation =>
+                    obligation == produced.result.obligation).length() > 0
+              | TerminalFailureReport(_) => true
+              | WorkResultReport(_) => false
+            })
             decideEvaluationTerminal(
               ticket,
               evaluation,
@@ -748,11 +769,11 @@ module ticket_domain {
               failurePolicy,
             )
           else refused(TaskNotCurrent({
-            ticket: report.ticket,
+            ticket: reportTicket(report),
             task: task,
           }))
         | _ => refused(TaskNotCurrent({
-            ticket: report.ticket,
+            ticket: reportTicket(report),
             task: task,
           }))
       }
@@ -846,7 +867,7 @@ module ticket_domain {
     graph: TicketGraph,
     ticket: Ticket,
     input: WorkInput,
-    source: WorkspaceSource,
+    source: int,
   ): TicketGraph = updateTicket(graph, ticket.definition.id, {
     ...ticket,
     workCyclesStarted: nextCycleNumber(ticket),
@@ -949,19 +970,18 @@ module ticket_domain {
     | TicketWorkResultAccepted(accepted) => {
         val ticket = graph.tickets.get(accepted.ticket)
         match ticket.state {
-          | Work(work) => {
+          | Work(work) => if (accepted.result.obligation ==
+              workTaskObligation(ticket, ticket.workCyclesStarted, work.source, work.input)) {
               val evaluation = begin(ticket.workCyclesStarted, {
                 ticket: accepted.ticket,
-                workResult: accepted.result.manifest,
-                acceptedSource: if (publishesRepositoryResult(
-                  ticket.definition.workConfiguration, work.source.repository))
-                  exactGitOutput(accepted.result) else work.source,
+                workResult: accepted.result.resultRef,
+                acceptedSourceRef: accepted.acceptedSourceRef,
               }, ticket.definition.evaluationPlan)
               updateTicket(graph, accepted.ticket, {
                 ...ticket,
                 state: Evaluation(evaluation),
               })
-            }
+            } else graph
           | _ => graph
         }
       }
@@ -998,11 +1018,7 @@ module ticket_domain {
         match ticket.state {
           | Evaluation(current) => updateTicket(graph, progress.ticket, {
               ...ticket,
-              state: Evaluation(applyTerminal(
-                current,
-                terminalTask(progress.terminal),
-                progress.terminal,
-              )),
+              state: Evaluation(applyEvaluationReport(current, progress.report)),
             })
           | _ => graph
         }
@@ -1011,18 +1027,14 @@ module ticket_domain {
         val ticket = graph.tickets.get(progress.ticket)
         match ticket.state {
           | Evaluation(current) => {
-              val evaluation = applyTerminal(
-                current,
-                terminalTask(progress.terminal),
-                progress.terminal,
-              )
+              val evaluation = applyEvaluationReport(current, progress.report)
               updateTicket(graph, progress.ticket, {
                 ...ticket,
                 state: Finalization({
                   workCycle: evaluation.workCycle,
                   generation: 1,
                   input: evaluation.input.workResult,
-                  source: evaluation.input.acceptedSource,
+                  source: evaluation.input.acceptedSourceRef,
                 }),
               })
             }
@@ -1036,7 +1048,7 @@ module ticket_domain {
               graph,
               ticket,
               evaluationReworkInput(ticket.definition, rework.evidence),
-              evaluation.input.acceptedSource,
+              evaluation.input.acceptedSourceRef,
             )
           | _ => graph
         }
@@ -1048,7 +1060,7 @@ module ticket_domain {
               ...ticket,
               state: Escalated(EvaluationFailureEscalated({
                 evidence: failure.evidence,
-                source: evaluation.input.acceptedSource,
+                source: evaluation.input.acceptedSourceRef,
               })),
             })
           | _ => graph
@@ -1060,11 +1072,7 @@ module ticket_domain {
           | Evaluation(current) => updateTicket(graph, unavailable.ticket, {
               ...ticket,
               state: Escalated(EvaluationBlockedEscalated(
-                applyTerminal(
-                  current,
-                  terminalTask(unavailable.terminal),
-                  unavailable.terminal,
-                ),
+                applyEvaluationReport(current, unavailable.report),
               )),
             })
           | _ => graph
@@ -1133,7 +1141,7 @@ module ticket_domain {
           entries.length() > 0
           and entries.indices().forall(index =>
             entries[index].evaluator > 0
-            and entries[index].resultManifest > 0)
+            and entries[index].resultRef > 0)
       | FinalizationRework(evidence) => evidence > 0
     }
 
@@ -1148,24 +1156,18 @@ module ticket_domain {
     match escalation {
       | WorkFailureEscalated(failure) =>
           workInputMatchesTicket(ticket, failure.resumeInput)
-          and failure.source.repository
-            == ticket.definition.workConfiguration.executionRequirements.repository
-          and failure.source.commit > 0
+          and failure.source > 0
           and failure.evidence > 0
       | WorkExecutionUnavailableEscalated(failure) =>
           workInputMatchesTicket(ticket, failure.resumeInput)
-          and failure.source.repository
-            == ticket.definition.workConfiguration.executionRequirements.repository
-          and failure.source.commit > 0
+          and failure.source > 0
           and failure.evidence > 0
       | EvaluationFailureEscalated(failure) =>
           workInputMatchesTicket(
             ticket,
             evaluationReworkInput(ticket.definition, failure.evidence),
           )
-          and failure.source.repository
-            == ticket.definition.workConfiguration.executionRequirements.repository
-          and failure.source.commit > 0
+          and failure.source > 0
       | EvaluationBlockedEscalated(evaluation) =>
           invariant(evaluation)
           and evaluation.input.ticket == ticket.definition.id
@@ -1178,9 +1180,7 @@ module ticket_domain {
           failure.finalization.workCycle == ticket.workCyclesStarted
           and failure.finalization.generation > 0
           and failure.finalization.input > 0
-          and failure.finalization.source.repository
-            == ticket.definition.workConfiguration.executionRequirements.repository
-          and failure.finalization.source.commit > 0
+          and failure.finalization.source > 0
           and failure.evidence > 0
     }
 
@@ -1193,22 +1193,17 @@ module ticket_domain {
       | Work(work) =>
           ticket.workCyclesStarted > 0
           and workInputMatchesTicket(ticket, work.input)
-          and work.source.repository
-            == ticket.definition.workConfiguration.executionRequirements.repository
-          and work.source.commit > 0
+          and work.source > 0
       | Evaluation(evaluation) =>
           invariant(evaluation)
           and evaluation.input.ticket == ticket.definition.id
           and evaluation.workCycle == ticket.workCyclesStarted
-          and evaluation.input.acceptedSource.repository
-            == ticket.definition.workConfiguration.executionRequirements.repository
+          and evaluation.input.acceptedSourceRef > 0
       | Finalization(finalization) =>
           finalization.workCycle == ticket.workCyclesStarted
           and finalization.generation > 0
           and finalization.input > 0
-          and finalization.source.repository
-            == ticket.definition.workConfiguration.executionRequirements.repository
-          and finalization.source.commit > 0
+          and finalization.source > 0
       | Escalated(escalation) => escalationValid(ticket, escalation)
       | Done => true
       | Revoked => true
@@ -1251,8 +1246,7 @@ module ticket_domain {
         and finalization.finalization.generation > 0
         and finalization.configuration > 0
         and finalization.finalization.input > 0
-        and finalization.finalization.source.repository > 0
-        and finalization.finalization.source.commit > 0
+        and finalization.finalization.source > 0
     | CancelTask(cancellation) =>
         cancellation.ticket == taskOwner(cancellation.task)
         and taskIdentityValid(cancellation.task)

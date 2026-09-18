@@ -45,12 +45,10 @@
         "TicketDependenciesChanged",
         "DependenciesIncomplete",
         "TicketNotRevocable",
-        "TicketNotResumable",
-        "WorkResultMissingExactGitOutput"
+        "TicketNotResumable"
       ],
       "unexercised": [
         "SelfDependency",
-        "DispatchSourceRepositoryMismatch",
         "TaskNotCurrent",
         "FinalizationNotCurrent"
       ]
@@ -70,317 +68,9 @@
   },
   "traces": [
     {
-      "file": "scenario-nonPublishingDoneTest.itf.json",
+      "file": "scenario-opaqueResultContractTest.itf.json",
       "kind": "scenario",
-      "scenario": "nonPublishingDoneTest",
-      "states": 10,
-      "steps": [
-        {
-          "index": 0,
-          "action": null,
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {}
-        },
-        {
-          "index": 1,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketCreated"
-          },
-          "tickets": {
-            "1": "Pending"
-          }
-        },
-        {
-          "index": 2,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketDispatched"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 3,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketWorkResultAccepted"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 4,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketWorkResultAccepted"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 5,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationProgressed"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 6,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationProgressed"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 7,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationPassed"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 8,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationSucceeded"
-          },
-          "tickets": {
-            "1": "Done"
-          }
-        },
-        {
-          "index": 9,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationSucceeded"
-          },
-          "tickets": {
-            "1": "Done"
-          }
-        }
-      ]
-    },
-    {
-      "file": "scenario-nonPublishingEscalationTest.itf.json",
-      "kind": "scenario",
-      "scenario": "nonPublishingEscalationTest",
-      "states": 7,
-      "steps": [
-        {
-          "index": 0,
-          "action": null,
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {}
-        },
-        {
-          "index": 1,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketCreated"
-          },
-          "tickets": {
-            "1": "Pending"
-          }
-        },
-        {
-          "index": 2,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketDispatched"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 3,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketWorkResultAccepted"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 4,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationProgressed"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 5,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationFailureEscalated"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 6,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationFailureEscalated"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        }
-      ]
-    },
-    {
-      "file": "scenario-publishingMissingOutputTest.itf.json",
-      "kind": "scenario",
-      "scenario": "publishingMissingOutputTest",
-      "states": 5,
-      "steps": [
-        {
-          "index": 0,
-          "action": null,
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {}
-        },
-        {
-          "index": 1,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketCreated"
-          },
-          "tickets": {
-            "1": "Pending"
-          }
-        },
-        {
-          "index": 2,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketDispatched"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 3,
-          "action": null,
-          "decision": {
-            "outcome": "refused",
-            "tag": "WorkResultMissingExactGitOutput"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 4,
-          "action": null,
-          "decision": {
-            "outcome": "refused",
-            "tag": "WorkResultMissingExactGitOutput"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        }
-      ]
-    },
-    {
-      "file": "scenario-repositoryContractTest.itf.json",
-      "kind": "scenario",
-      "scenario": "repositoryContractTest",
-      "states": 4,
-      "steps": [
-        {
-          "index": 0,
-          "action": null,
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {}
-        },
-        {
-          "index": 1,
-          "action": null,
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {}
-        },
-        {
-          "index": 2,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketCreated"
-          },
-          "tickets": {
-            "1": "Pending"
-          }
-        },
-        {
-          "index": 3,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketCreated"
-          },
-          "tickets": {
-            "1": "Pending"
-          }
-        }
-      ]
-    },
-    {
-      "file": "scenario-workOutputRepositoryContractTest.itf.json",
-      "kind": "scenario",
-      "scenario": "workOutputRepositoryContractTest",
+      "scenario": "opaqueResultContractTest",
       "states": 2,
       "steps": [
         {
@@ -400,6 +90,56 @@
             "tag": "TicketNotFound"
           },
           "tickets": {}
+        }
+      ]
+    },
+    {
+      "file": "scenario-exactWorkObligationTest.itf.json",
+      "kind": "scenario",
+      "scenario": "exactWorkObligationTest",
+      "states": 4,
+      "steps": [
+        {
+          "index": 0,
+          "action": null,
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {}
+        },
+        {
+          "index": 1,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketCreated"
+          },
+          "tickets": {
+            "1": "Pending"
+          }
+        },
+        {
+          "index": 2,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketDispatched"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 3,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketDispatched"
+          },
+          "tickets": {
+            "1": "Work"
+          }
         }
       ]
     },
@@ -1180,24 +920,10 @@
       ]
     },
     {
-      "file": "scenario-failedEvaluatorFindingsAreCarriedIntoReworkEntryTest.itf.json",
+      "file": "scenario-failedEvaluatorResultRefReachesReworkTest.itf.json",
       "kind": "scenario",
-      "scenario": "failedEvaluatorFindingsAreCarriedIntoReworkEntryTest",
-      "states": 1,
-      "steps": [
-        {
-          "index": 0,
-          "action": null,
-          "decision": null,
-          "tickets": {}
-        }
-      ]
-    },
-    {
-      "file": "scenario-evaluatorFindingsReachTheNextWorkCycleTest.itf.json",
-      "kind": "scenario",
-      "scenario": "evaluatorFindingsReachTheNextWorkCycleTest",
-      "states": 9,
+      "scenario": "failedEvaluatorResultRefReachesReworkTest",
+      "states": 8,
       "steps": [
         {
           "index": 0,
@@ -1212,6 +938,15 @@
           "index": 1,
           "action": null,
           "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {}
+        },
+        {
+          "index": 2,
+          "action": null,
+          "decision": {
             "outcome": "decided",
             "tag": "TicketCreated"
           },
@@ -1220,7 +955,7 @@
           }
         },
         {
-          "index": 2,
+          "index": 3,
           "action": null,
           "decision": {
             "outcome": "decided",
@@ -1228,17 +963,6 @@
           },
           "tickets": {
             "1": "Work"
-          }
-        },
-        {
-          "index": 3,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketWorkResultAccepted"
-          },
-          "tickets": {
-            "1": "Evaluation"
           }
         },
         {
@@ -1276,17 +1000,6 @@
         },
         {
           "index": 7,
-          "action": null,
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationReworkStarted"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 8,
           "action": null,
           "decision": {
             "outcome": "decided",
@@ -2516,7 +2229,7 @@
       "file": "scenario-staleFinalizationIsRefusedTest.itf.json",
       "kind": "scenario",
       "scenario": "staleFinalizationIsRefusedTest",
-      "states": 13,
+      "states": 15,
       "steps": [
         {
           "index": 0,
@@ -2609,10 +2322,10 @@
           "action": null,
           "decision": {
             "outcome": "decided",
-            "tag": "TicketFinalizationResumed"
+            "tag": "TicketFinalizationUnavailable"
           },
           "tickets": {
-            "1": "Finalization"
+            "1": "Escalated"
           }
         },
         {
@@ -2642,6 +2355,28 @@
           "action": null,
           "decision": {
             "outcome": "decided",
+            "tag": "TicketFinalizationResumed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 12,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationResumed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 13,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
             "tag": "TicketFinalizationSucceeded"
           },
           "tickets": {
@@ -2649,7 +2384,7 @@
           }
         },
         {
-          "index": 12,
+          "index": 14,
           "action": null,
           "decision": {
             "outcome": "decided",
