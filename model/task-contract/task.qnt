@@ -13,9 +13,6 @@ module task_contract {
     WorkTask(WorkTaskIdentity)
     | EvaluationTask(EvaluationTaskIdentity)
 
-  // Execution requirements are an opaque reference like every other pinned
-  // material: the scheduler resolves capabilities, placement and access from
-  // it, and the contract only carries it unchanged into the obligation.
   type TaskDefinition = {
     workload: int,
     inputs: int,
@@ -23,7 +20,6 @@ module task_contract {
     resultContract: int
   }
 
-  // A context reference is scoped by the obligation's logical task identity.
   type TaskObligation = {
     task: TaskIdentity,
     definition: TaskDefinition,
