@@ -28,17 +28,25 @@ function producedWork(
   );
 }
 
-test("task definitions require immutable refs and capability names", () => {
+test("task definitions require immutable refs", () => {
   expect(
     () =>
       new t.TaskDefinition(
         t.ContentRef(0),
         t.ContentRef(1),
-        new t.ExecutionRequirements(),
+        t.ContentRef(1),
         t.ContentRef(1),
       ),
   ).toThrow();
-  expect(() => new t.ExecutionRequirements([""])).toThrow();
+  expect(
+    () =>
+      new t.TaskDefinition(
+        t.ContentRef(1),
+        t.ContentRef(1),
+        t.ContentRef(0),
+        t.ContentRef(1),
+      ),
+  ).toThrow();
   const obligation = new t.TaskObligation(
     new t.WorkTaskId(t.TicketId(1), t.CycleNumber(1)),
     b.WORK,

@@ -4,18 +4,13 @@ module ticket_domain {
 
   type ReleasedContent = int
 
-  type ReleasedWorkInput = {
-    content: ReleasedContent,
-    inputBindings: int
-  }
-
   type WorkCause =
     InitialWork
     | EvaluationRework(List[EvaluationReworkEntry])
     | FinalizationRework(int)
 
   type WorkInput = {
-    released: ReleasedWorkInput,
+    released: ReleasedContent,
     cause: WorkCause,
     retryEvidence: List[int]
   }
@@ -61,7 +56,6 @@ module ticket_domain {
   type ReleasedTicket = {
     id: int,
     content: ReleasedContent,
-    inputBindings: int,
     dependencies: Set[int],
     workConfiguration: TaskDefinition,
     evaluationPlan: EvaluationPlan,
@@ -271,7 +265,6 @@ module ticket_domain {
   pure def releasedTicketValid(definition: ReleasedTicket): bool =
     definition.id > 0
     and releasedContentValid(definition.content)
-    and definition.inputBindings > 0
     and definition.dependencies.forall(dependency => dependency > 0)
     and taskDefinitionValid(definition.workConfiguration)
     and planValid(definition.evaluationPlan)
@@ -341,18 +334,20 @@ module ticket_domain {
     | WorkResultReport(_) => evaluation
   }
 
+  // An evaluation event may only be applied to the evaluation that still owes
+  // its reported task; the phase alone does not make the pairing legal.
+  pure def reportAdmissible(
+    evaluation: EvaluationInstance,
+    report: TaskTerminalReport,
+  ): bool = taskCurrent(evaluation, reportTask(report))
+
   pure def workTaskIdentity(ticket: int, cycle: int): TaskIdentity =
     WorkTask({ ticket: ticket, cycle: cycle })
-
-  pure def releasedWorkInput(definition: ReleasedTicket): ReleasedWorkInput = {
-    content: definition.content,
-    inputBindings: definition.inputBindings,
-  }
 
   pure def releasedContentValid(content: ReleasedContent): bool = content > 0
 
   pure def initialWorkInput(definition: ReleasedTicket): WorkInput = {
-    released: releasedWorkInput(definition),
+    released: definition.content,
     cause: InitialWork,
     retryEvidence: [],
   }
@@ -368,7 +363,7 @@ module ticket_domain {
     definition: ReleasedTicket,
     entries: List[EvaluationReworkEntry],
   ): WorkInput = {
-    released: releasedWorkInput(definition),
+    released: definition.content,
     cause: EvaluationRework(entries),
     retryEvidence: [],
   }
@@ -377,7 +372,7 @@ module ticket_domain {
     definition: ReleasedTicket,
     evidence: int,
   ): WorkInput = {
-    released: releasedWorkInput(definition),
+    released: definition.content,
     cause: FinalizationRework(evidence),
     retryEvidence: [],
   }
@@ -409,6 +404,13 @@ module ticket_domain {
     ...operation,
     generation: operation.generation + 1,
   }
+
+  pure def finalizationCurrent(
+    operation: FinalizationOperation,
+    workCycle: int,
+    generation: int,
+  ): bool =
+    operation.workCycle == workCycle and operation.generation == generation
 
   pure def executeEvaluationTasks(
     ticket: int,
@@ -789,8 +791,11 @@ module ticket_domain {
       val ticket = graph.tickets.get(report.ticket)
       match ticket.state {
         | Finalization(finalization) =>
-            if (finalization.workCycle != report.workCycle
-              or finalization.generation != report.generation)
+            if (not(finalizationCurrent(
+                finalization,
+                report.workCycle,
+                report.generation,
+              )))
               refused(FinalizationNotCurrent({
                 ticket: report.ticket,
                 workCycle: report.workCycle,
@@ -1016,98 +1021,144 @@ module ticket_domain {
     | TicketEvaluationProgressed(progress) => {
         val ticket = graph.tickets.get(progress.ticket)
         match ticket.state {
-          | Evaluation(current) => updateTicket(graph, progress.ticket, {
-              ...ticket,
-              state: Evaluation(applyEvaluationReport(current, progress.report)),
-            })
+          | Evaluation(current) =>
+              if (not(reportAdmissible(current, progress.report))) graph
+              else {
+                val evaluation = applyEvaluationReport(current, progress.report)
+                match evaluation.state {
+                  | Running(_) => updateTicket(graph, progress.ticket, {
+                      ...ticket,
+                      state: Evaluation(evaluation),
+                    })
+                  | _ => graph
+                }
+              }
           | _ => graph
         }
       }
     | TicketEvaluationPassed(progress) => {
         val ticket = graph.tickets.get(progress.ticket)
         match ticket.state {
-          | Evaluation(current) => {
-              val evaluation = applyEvaluationReport(current, progress.report)
-              updateTicket(graph, progress.ticket, {
-                ...ticket,
-                state: Finalization({
-                  workCycle: evaluation.workCycle,
-                  generation: 1,
-                  input: evaluation.input.workResult,
-                  source: evaluation.input.acceptedSourceRef,
-                }),
-              })
-            }
+          | Evaluation(current) =>
+              if (not(reportAdmissible(current, progress.report))) graph
+              else {
+                val evaluation = applyEvaluationReport(current, progress.report)
+                match evaluation.state {
+                  | EvaluationPassed(_) => updateTicket(graph, progress.ticket, {
+                      ...ticket,
+                      state: Finalization({
+                        workCycle: evaluation.workCycle,
+                        generation: 1,
+                        input: evaluation.input.workResult,
+                        source: evaluation.input.acceptedSourceRef,
+                      }),
+                    })
+                  | _ => graph
+                }
+              }
           | _ => graph
         }
       }
     | TicketEvaluationReworkStarted(rework) => {
         val ticket = graph.tickets.get(rework.ticket)
         match ticket.state {
-          | Evaluation(evaluation) => enterWorkCycle(
-              graph,
-              ticket,
-              evaluationReworkInput(ticket.definition, rework.evidence),
-              evaluation.input.acceptedSourceRef,
-            )
+          | Evaluation(evaluation) =>
+              if (not(reportAdmissible(evaluation, rework.report))) graph
+              else match applyEvaluationReport(evaluation, rework.report).state {
+                | EvaluationFailed(_) => enterWorkCycle(
+                    graph,
+                    ticket,
+                    evaluationReworkInput(ticket.definition, rework.evidence),
+                    evaluation.input.acceptedSourceRef,
+                  )
+                | _ => graph
+              }
           | _ => graph
         }
       }
     | TicketEvaluationFailureEscalated(failure) => {
         val ticket = graph.tickets.get(failure.ticket)
         match ticket.state {
-          | Evaluation(evaluation) => updateTicket(graph, failure.ticket, {
-              ...ticket,
-              state: Escalated(EvaluationFailureEscalated({
-                evidence: failure.evidence,
-                source: evaluation.input.acceptedSourceRef,
-              })),
-            })
+          | Evaluation(evaluation) =>
+              if (not(reportAdmissible(evaluation, failure.report))) graph
+              else match applyEvaluationReport(evaluation, failure.report).state {
+                | EvaluationFailed(_) => updateTicket(graph, failure.ticket, {
+                    ...ticket,
+                    state: Escalated(EvaluationFailureEscalated({
+                      evidence: failure.evidence,
+                      source: evaluation.input.acceptedSourceRef,
+                    })),
+                  })
+                | _ => graph
+              }
           | _ => graph
         }
       }
     | TicketEvaluationBlocked(unavailable) => {
         val ticket = graph.tickets.get(unavailable.ticket)
         match ticket.state {
-          | Evaluation(current) => updateTicket(graph, unavailable.ticket, {
-              ...ticket,
-              state: Escalated(EvaluationBlockedEscalated(
-                applyEvaluationReport(current, unavailable.report),
-              )),
-            })
+          | Evaluation(current) =>
+              if (not(reportAdmissible(current, unavailable.report))) graph
+              else {
+                val evaluation = applyEvaluationReport(current, unavailable.report)
+                match evaluation.state {
+                  | EvaluationBlocked(_) => updateTicket(graph, unavailable.ticket, {
+                      ...ticket,
+                      state: Escalated(EvaluationBlockedEscalated(evaluation)),
+                    })
+                  | _ => graph
+                }
+              }
           | _ => graph
         }
       }
     | TicketFinalizationSucceeded(result) => {
         val ticket = graph.tickets.get(result.ticket)
         match ticket.state {
-          | Finalization(_) =>
-              updateTicket(graph, result.ticket, { ...ticket, state: Done })
+          | Finalization(finalization) =>
+              if (not(finalizationCurrent(
+                finalization,
+                result.workCycle,
+                result.generation,
+              ))) graph
+              else updateTicket(graph, result.ticket, { ...ticket, state: Done })
           | _ => graph
         }
       }
     | TicketFinalizationNeedsWork(rework) => {
         val ticket = graph.tickets.get(rework.ticket)
         match ticket.state {
-          | Finalization(finalization) => enterWorkCycle(
-              graph,
-              ticket,
-              finalizationReworkInput(ticket.definition, rework.evidence),
-              finalization.source,
-            )
+          | Finalization(finalization) =>
+              if (not(finalizationCurrent(
+                finalization,
+                rework.workCycle,
+                rework.generation,
+              ))) graph
+              else enterWorkCycle(
+                graph,
+                ticket,
+                finalizationReworkInput(ticket.definition, rework.evidence),
+                finalization.source,
+              )
           | _ => graph
         }
       }
     | TicketFinalizationUnavailable(unavailable) => {
         val ticket = graph.tickets.get(unavailable.ticket)
         match ticket.state {
-          | Finalization(current) => updateTicket(graph, unavailable.ticket, {
-              ...ticket,
-              state: Escalated(FinalizationUnavailableEscalated({
-                finalization: current,
-                evidence: unavailable.evidence,
-              })),
-            })
+          | Finalization(current) =>
+              if (not(finalizationCurrent(
+                current,
+                unavailable.workCycle,
+                unavailable.generation,
+              ))) graph
+              else updateTicket(graph, unavailable.ticket, {
+                ...ticket,
+                state: Escalated(FinalizationUnavailableEscalated({
+                  finalization: current,
+                  evidence: unavailable.evidence,
+                })),
+              })
           | _ => graph
         }
       }
@@ -1131,8 +1182,7 @@ module ticket_domain {
   )
 
   pure def workInputValid(input: WorkInput): bool =
-    releasedContentValid(input.released.content)
-    and input.released.inputBindings > 0
+    releasedContentValid(input.released)
     and input.retryEvidence.indices().forall(index =>
       input.retryEvidence[index] > 0)
     and match input.cause {
@@ -1150,7 +1200,7 @@ module ticket_domain {
     input: WorkInput,
   ): bool =
     workInputValid(input)
-    and input.released == releasedWorkInput(ticket.definition)
+    and input.released == ticket.definition.content
 
   pure def escalationValid(ticket: Ticket, escalation: Escalation): bool =
     match escalation {
@@ -1199,6 +1249,10 @@ module ticket_domain {
           and evaluation.input.ticket == ticket.definition.id
           and evaluation.workCycle == ticket.workCyclesStarted
           and evaluation.input.acceptedSourceRef > 0
+          and match evaluation.state {
+            | Running(_) => true
+            | _ => false
+          }
       | Finalization(finalization) =>
           finalization.workCycle == ticket.workCyclesStarted
           and finalization.generation > 0

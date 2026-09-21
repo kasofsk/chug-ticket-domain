@@ -6,14 +6,14 @@ module ticket_tests {
   pure val WORK = {
     workload: 1,
     inputs: 1,
-    executionRequirements: { requiredCapabilities: Set() },
+    executionRequirements: 1,
     resultContract: 1,
   }
 
   pure val EVALUATOR = {
     workload: 2,
     inputs: 2,
-    executionRequirements: { requiredCapabilities: Set() },
+    executionRequirements: 2,
     resultContract: 2,
   }
 
@@ -44,7 +44,6 @@ module ticket_tests {
   ): ReleasedTicket = {
     id: ticket,
     content: ticket * 100 + 1,
-    inputBindings: ticket * 100 + 3,
     dependencies: dependencies,
     workConfiguration: WORK,
     evaluationPlan: PLAN,
@@ -243,6 +242,26 @@ module ticket_tests {
     | TicketRefused(_) => []
   }
 
+  pure def currentEvaluatorReport(
+    ticketId: int,
+    evaluation: EvaluationInstance,
+    resultRef: int,
+    verdict: EvaluationVerdict,
+  ): TaskTerminalReport = EvaluationResultReport({
+    ticket: ticketId,
+    result: validatedTaskResult(
+      currentTaskObligations(evaluation)[0],
+      resultRef,
+    ),
+    verdict: verdict,
+  })
+
+  pure def graphFinalizing(candidate: TicketGraph, ticketId: int): bool =
+    match candidate.tickets.get(ticketId).state {
+      | Finalization(_) => true
+      | _ => false
+    }
+
   def ticketDone(ticketId: int): bool =
     graph.tickets.get(ticketId).state == Done
 
@@ -359,31 +378,19 @@ module ticket_tests {
       .then(check(ticketDone(1) and isReady(graph, 2)))
   }
 
-  def decidedCapabilities: List[Set[str]] = match lastDecision {
+  def decidedExecutionRequirements: List[int] = match lastDecision {
     | TicketDecided(success) => success.obligations.foldl([], (found, obligation) =>
         match obligation {
           | ExecuteTask(execution) => found.append(
-              execution.task.definition.executionRequirements.requiredCapabilities)
+              execution.task.definition.executionRequirements)
           | _ => found
         })
     | TicketRefused(_) => []
   }
 
-  run requiredCapabilitiesPreservedTest = {
-    val work = {
-      ...WORK,
-      executionRequirements: {
-        ...WORK.executionRequirements,
-        requiredCapabilities: Set("macos-native", "xcode"),
-      },
-    }
-    val evaluator = {
-      ...EVALUATOR,
-      executionRequirements: {
-        ...EVALUATOR.executionRequirements,
-        requiredCapabilities: Set("linux"),
-      },
-    }
+  run executionRequirementsPreservedTest = {
+    val work = { ...WORK, executionRequirements: 31 }
+    val evaluator = { ...EVALUATOR, executionRequirements: 32 }
     val definition = {
       ...released(1, Set()),
       workConfiguration: work,
@@ -394,36 +401,30 @@ module ticket_tests {
         }],
       },
     }
-    val invalid = {
-      ...work,
-      executionRequirements: {
-        ...work.executionRequirements,
-        requiredCapabilities: Set(""),
-      },
-    }
+    val invalid = { ...work, executionRequirements: 0 }
     init
       .then(check(taskDefinitionValid(WORK) and not(taskDefinitionValid(invalid))))
       .then(submit(CreateTicket(released(1, Set()))))
       .then(submit(updateTo(1, 1, definition)))
       .then(submit(dispatch(1)))
-      .then(check(decidedCapabilities == [Set("xcode", "macos-native")]))
+      .then(check(decidedExecutionRequirements == [31]))
       .then(submit(updateTo(1, 2, released(1, Set()))))
       .then(check(lastDecision == TicketRefused(TicketNotPending(1))
         and ticketDefinition(1, definition)))
       .then(reportWorkProcessFailed(1, 901))
       .then(submit(ResumeTicket(1)))
-      .then(check(decidedCapabilities == [Set("macos-native", "xcode")]))
+      .then(check(decidedExecutionRequirements == [31]))
       .then(reportWorkResult(1, 902))
-      .then(check(decidedCapabilities == [Set("linux"), Set("linux")]))
+      .then(check(decidedExecutionRequirements == [32, 32]))
       .then(reportEvaluatorResult(1, 903, EvaluatorFail))
       .then(reportEvaluatorResult(1, 904, EvaluatorPass))
-      .then(check(decidedCapabilities == [Set("macos-native", "xcode")]))
+      .then(check(decidedExecutionRequirements == [31]))
       .then(reportWorkResult(1, 905))
-      .then(check(decidedCapabilities == [Set("linux"), Set("linux")]))
+      .then(check(decidedExecutionRequirements == [32, 32]))
       .then(reportEvaluatorResult(1, 906, EvaluatorPass))
       .then(reportEvaluatorUnavailable(1, 907))
       .then(submit(ResumeTicket(1)))
-      .then(check(decidedCapabilities == [Set("linux")]
+      .then(check(decidedExecutionRequirements == [32]
         and ticketDefinition(1, definition)))
   }
 
@@ -746,6 +747,24 @@ module ticket_tests {
         workCycle: 1,
         generation: 1,
       }))))
+      .then(check(evolve(graph, TicketFinalizationSucceeded({
+        ticket: 1,
+        workCycle: 1,
+        generation: 1,
+        evidence: 1041,
+      })) == graph))
+      .then(check(evolve(graph, TicketFinalizationNeedsWork({
+        ticket: 1,
+        workCycle: 1,
+        generation: 1,
+        evidence: 1041,
+      })) == graph))
+      .then(check(evolve(graph, TicketFinalizationUnavailable({
+        ticket: 1,
+        workCycle: 1,
+        generation: 1,
+        evidence: 1041,
+      })) == graph))
       .then(reportFinalization(1, FinalizationSucceeded(1042)))
       .then(check(ticketDone(1)))
   }
@@ -769,6 +788,58 @@ module ticket_tests {
       .then(check(
         not(graphInvariant(applyCommand(graph, absentEvidence, reworkPolicy)))
       ))
+  }
+
+  run evolveRejectsMispairedEvaluationTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(reportWorkResult(1, 1301))
+      .then(reportEvaluatorResult(1, 1311, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 1312, EvaluatorPass))
+      .then(check(match graph.tickets.get(1).state {
+        | Evaluation(evaluation) => match evaluation.state {
+            | Running(progress) => progress.stage.stageIndex == 1
+            | _ => false
+          }
+        | _ => false
+      }))
+      .then(check(match graph.tickets.get(1).state {
+        | Evaluation(evaluation) => {
+            // The last evaluator of the last stage concludes evaluation, so
+            // only Passed may carry this report. Every other pairing would
+            // leave a concluded evaluation resting in the Evaluation phase.
+            val report =
+              currentEvaluatorReport(1, evaluation, 1321, EvaluatorPass)
+            and {
+              evolve(graph, TicketEvaluationProgressed({
+                ticket: 1,
+                report: report,
+              })) == graph,
+              evolve(graph, TicketEvaluationBlocked({
+                ticket: 1,
+                report: report,
+              })) == graph,
+              evolve(graph, TicketEvaluationReworkStarted({
+                ticket: 1,
+                report: report,
+                evidence: [{ evaluator: 21, resultRef: 1321 }],
+              })) == graph,
+              evolve(graph, TicketEvaluationFailureEscalated({
+                ticket: 1,
+                report: report,
+                evidence: [{ evaluator: 21, resultRef: 1321 }],
+              })) == graph,
+              graphFinalizing(evolve(graph, TicketEvaluationPassed({
+                ticket: 1,
+                report: report,
+              })), 1),
+            }
+          }
+        | _ => false
+      }))
+      .then(reportEvaluatorResult(1, 1321, EvaluatorPass))
+      .then(check(ticketFinalizing(1)))
   }
 
   run evolveIgnoresImpossiblePairingTest = {

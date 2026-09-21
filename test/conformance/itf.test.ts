@@ -102,19 +102,14 @@ test("distinct decisions preserve happy path indexing", () => {
   ]);
 });
 
-test("capability trace conversion retains distinct nonempty requirement sets", () => {
+test("execution requirement refs survive trace conversion distinctly", () => {
   const trace = traces.find(
-    (entry) => entry.name === "requiredCapabilitiesPreservedTest",
+    (entry) => entry.name === "executionRequirementsPreservedTest",
   )!;
   const final = graph_from_itf(trace.states.at(-1)![itf.GRAPH_VAR]!);
   const ticket = [...final.tickets.values()][0]!;
-  expect(
-    ticket.definition.work_configuration.execution_requirements
-      .required_capabilities,
-  ).toEqual(["macos-native", "xcode"]);
+  expect(ticket.definition.work_configuration.execution_requirements).toBe(31);
   for (const stage of ticket.definition.evaluation_plan.stages)
     for (const evaluator of stage.evaluators)
-      expect(
-        evaluator.task.execution_requirements.required_capabilities,
-      ).toEqual(["linux"]);
+      expect(evaluator.task.execution_requirements).toBe(32);
 });

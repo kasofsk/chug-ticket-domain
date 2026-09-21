@@ -38,7 +38,6 @@ import {
   WorkTaskId,
   EvaluationTaskId,
   TaskId,
-  ExecutionRequirements,
   TaskDefinition,
   TaskObligation,
   ValidatedTaskResult,
@@ -82,7 +81,6 @@ import {
   EvaluationInstance,
 } from "../../src/evaluation.js";
 import {
-  ReleasedWorkInput,
   InitialWork,
   EvaluationRework,
   FinalizationRework,
@@ -207,16 +205,6 @@ function parse_EvaluationTaskId(v: Value): EvaluationTaskId {
     parse_EvaluatorKey(r["evaluator"]!),
   );
 }
-function parse_ExecutionRequirements(v: Value): ExecutionRequirements {
-  const r = record(v, ["requiredCapabilities"]);
-  return new ExecutionRequirements(
-    set(r["requiredCapabilities"]!).map((name) => {
-      if (typeof name !== "string")
-        throw new ConversionError("expected capability name");
-      return name;
-    }),
-  );
-}
 function parse_TaskDefinition(v: Value): TaskDefinition {
   const r = record(v, [
     "workload",
@@ -227,7 +215,7 @@ function parse_TaskDefinition(v: Value): TaskDefinition {
   return new TaskDefinition(
     parse_ContentRef(r["workload"]!),
     parse_ContentRef(r["inputs"]!),
-    parse_ExecutionRequirements(r["executionRequirements"]!),
+    parse_ContentRef(r["executionRequirements"]!),
     parse_ContentRef(r["resultContract"]!),
   );
 }
@@ -403,13 +391,6 @@ function parse_EvaluationInstance(v: Value): EvaluationInstance {
     parse_EvaluationState(r["state"]!),
   );
 }
-function parse_ReleasedWorkInput(v: Value): ReleasedWorkInput {
-  const r = record(v, ["content", "inputBindings"]);
-  return new ReleasedWorkInput(
-    parse_ContentRef(r["content"]!),
-    parse_ContentRef(r["inputBindings"]!),
-  );
-}
 function parse_InitialWork(v: Value): InitialWork {
   if (!(v instanceof Variant) || v.tag !== "InitialWork")
     throw new ConversionError("expected InitialWork variant");
@@ -435,7 +416,7 @@ function parse_FinalizationRework(v: Value): FinalizationRework {
 function parse_WorkInput(v: Value): WorkInput {
   const r = record(v, ["released", "cause", "retryEvidence"]);
   return new WorkInput(
-    parse_ReleasedWorkInput(r["released"]!),
+    parse_ContentRef(r["released"]!),
     parse_WorkCause(r["cause"]!),
     list(r["retryEvidence"]!).map((item) => parse_ContentRef(item)),
   );
@@ -530,7 +511,6 @@ function parse_ReleasedTicket(v: Value): ReleasedTicket {
   const r = record(v, [
     "id",
     "content",
-    "inputBindings",
     "dependencies",
     "workConfiguration",
     "evaluationPlan",
@@ -539,7 +519,6 @@ function parse_ReleasedTicket(v: Value): ReleasedTicket {
   return new ReleasedTicket(
     parse_TicketId(r["id"]!),
     parse_ContentRef(r["content"]!),
-    parse_ContentRef(r["inputBindings"]!),
     new Set(set(r["dependencies"]!).map((item) => parse_TicketId(item))),
     parse_TaskDefinition(r["workConfiguration"]!),
     parse_EvaluationPlan(r["evaluationPlan"]!),

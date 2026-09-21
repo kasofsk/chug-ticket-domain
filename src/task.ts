@@ -47,35 +47,12 @@ export class EvaluationTaskId {
 
 export type TaskId = WorkTaskId | EvaluationTaskId;
 
-export class ExecutionRequirements {
-  readonly kind = "ExecutionRequirements";
-  readonly required_capabilities: readonly string[];
-  constructor(
-    required_capabilities: readonly string[] | ReadonlySet<string> = [],
-  ) {
-    if (
-      !Array.isArray(required_capabilities) &&
-      !(required_capabilities instanceof Set)
-    )
-      throw new Error("required capabilities must be a collection of names");
-    const capabilities = [...required_capabilities];
-    if (
-      capabilities.some((name) => typeof name !== "string" || name.length === 0)
-    )
-      throw new Error("required capabilities must be nonempty names");
-    this.required_capabilities = Object.freeze(
-      [...new Set(capabilities)].sort(),
-    );
-    Object.freeze(this);
-  }
-}
-
 export class TaskDefinition {
   readonly kind = "TaskDefinition";
   constructor(
     readonly workload: ContentRef,
     readonly inputs: ContentRef,
-    readonly execution_requirements: ExecutionRequirements,
+    readonly execution_requirements: ContentRef,
     readonly result_contract: ContentRef,
   ) {
     validate_TaskDefinition(this);
@@ -191,6 +168,7 @@ function validate_EvaluationTaskId(v: EvaluationTaskId): void {
 function validate_TaskDefinition(v: TaskDefinition): void {
   positive(v.workload, "workload must be present");
   positive(v.inputs, "inputs must be present");
+  positive(v.execution_requirements, "execution requirements must be present");
   positive(v.result_contract, "result contract must be present");
 }
 function validate_TaskObligation(v: TaskObligation): void {

@@ -13,12 +13,13 @@ module task_contract {
     WorkTask(WorkTaskIdentity)
     | EvaluationTask(EvaluationTaskIdentity)
 
-  type ExecutionRequirements = { requiredCapabilities: Set[str] }
-
+  // Execution requirements are an opaque reference like every other pinned
+  // material: the scheduler resolves capabilities, placement and access from
+  // it, and the contract only carries it unchanged into the obligation.
   type TaskDefinition = {
     workload: int,
     inputs: int,
-    executionRequirements: ExecutionRequirements,
+    executionRequirements: int,
     resultContract: int
   }
 
@@ -59,7 +60,7 @@ module task_contract {
   pure def taskDefinitionValid(definition: TaskDefinition): bool =
     definition.workload > 0
     and definition.inputs > 0
-    and definition.executionRequirements.requiredCapabilities.forall(name => name != "")
+    and definition.executionRequirements > 0
     and definition.resultContract > 0
 
   pure def taskObligationValid(obligation: TaskObligation): bool =

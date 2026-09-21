@@ -5,13 +5,13 @@ export const source = (commit: number) => t.ContentRef(commit);
 export const WORK = new t.TaskDefinition(
   t.ContentRef(1),
   t.ContentRef(1),
-  new t.ExecutionRequirements(),
+  t.ContentRef(1),
   t.ContentRef(1),
 );
 export const EVALUATOR = new t.TaskDefinition(
   t.ContentRef(2),
   t.ContentRef(2),
-  new t.ExecutionRequirements(),
+  t.ContentRef(2),
   t.ContentRef(2),
 );
 export const PLAN = new e.EvaluationPlan([
@@ -31,7 +31,6 @@ export function released(
   return new k.ReleasedTicket(
     t.TicketId(id),
     t.ContentRef(id * 100 + (revised ? 51 : 1)),
-    t.ContentRef(id * 100 + 3),
     deps,
     WORK,
     PLAN,

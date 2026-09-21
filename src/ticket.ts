@@ -38,16 +38,6 @@ import {
 
 export type ReleasedContent = ContentRef;
 
-export class ReleasedWorkInput {
-  readonly kind = "ReleasedWorkInput";
-  constructor(
-    readonly content: ReleasedContent,
-    readonly input_bindings: ContentRef,
-  ) {
-    Object.freeze(this);
-  }
-}
-
 export class InitialWork {
   readonly kind = "InitialWork";
   constructor() {
@@ -76,7 +66,7 @@ export type WorkCause = InitialWork | EvaluationRework | FinalizationRework;
 export class WorkInput {
   readonly kind = "WorkInput";
   constructor(
-    readonly released: ReleasedWorkInput,
+    readonly released: ReleasedContent,
     readonly cause: WorkCause,
     readonly retry_evidence: readonly ContentRef[],
   ) {
@@ -209,7 +199,6 @@ export class ReleasedTicket {
   constructor(
     readonly id: TicketId,
     readonly content: ReleasedContent,
-    readonly input_bindings: ContentRef,
     readonly dependencies: ReadonlySet<TicketId>,
     readonly work_configuration: TaskDefinition,
     readonly evaluation_plan: EvaluationPlan,
@@ -875,8 +864,6 @@ function _release_error(d: ReleasedTicket): string | null {
   if (d.id <= 0) return `ticket id must be present: ${d.id}`;
   const e = _released_content_error(d.content);
   if (e) return e;
-  if (d.input_bindings <= 0)
-    return `input bindings must be present: ${d.input_bindings}`;
   const absent = [...d.dependencies]
     .filter((x) => x <= 0)
     .sort((a, b) => a - b);
@@ -927,11 +914,8 @@ export function work_task_identity(
 ): TaskId {
   return new WorkTaskId(ticket, cycle);
 }
-export function released_work_input(d: ReleasedTicket): ReleasedWorkInput {
-  return new ReleasedWorkInput(d.content, d.input_bindings);
-}
 export function initial_work_input(d: ReleasedTicket): WorkInput {
-  return new WorkInput(released_work_input(d), new InitialWork(), []);
+  return new WorkInput(d.content, new InitialWork(), []);
 }
 export function retry_work_input(i: WorkInput, e: ContentRef): WorkInput {
   return new WorkInput(i.released, i.cause, [...i.retry_evidence, e]);
@@ -943,17 +927,13 @@ export function evaluation_rework_input(
   d: ReleasedTicket,
   entries: readonly EvaluationReworkEntry[],
 ): WorkInput {
-  return new WorkInput(
-    released_work_input(d),
-    new EvaluationRework(entries),
-    [],
-  );
+  return new WorkInput(d.content, new EvaluationRework(entries), []);
 }
 export function finalization_rework_input(
   d: ReleasedTicket,
   e: ContentRef,
 ): WorkInput {
-  return new WorkInput(released_work_input(d), new FinalizationRework(e), []);
+  return new WorkInput(d.content, new FinalizationRework(e), []);
 }
 export function work_task_obligation(
   t: Ticket,
@@ -1506,8 +1486,7 @@ export function apply_command(
 }
 function _work_input_valid(i: WorkInput): boolean {
   return (
-    _released_content_error(i.released.content) === null &&
-    i.released.input_bindings > 0 &&
+    _released_content_error(i.released) === null &&
     i.retry_evidence.every((e) => e > 0) &&
     (i.cause instanceof InitialWork ||
       (i.cause instanceof EvaluationRework
@@ -1517,9 +1496,7 @@ function _work_input_valid(i: WorkInput): boolean {
   );
 }
 function _work_input_matches_ticket(t: Ticket, i: WorkInput): boolean {
-  return (
-    _work_input_valid(i) && equal(i.released, released_work_input(t.definition))
-  );
+  return _work_input_valid(i) && equal(i.released, t.definition.content);
 }
 function _escalation_valid(t: Ticket, e: Escalation): boolean {
   if (
@@ -1582,7 +1559,8 @@ function _ticket_invariant(t: Ticket): boolean {
       evaluation_invariant(e) &&
       e.input.ticket === t.definition.id &&
       e.work_cycle === t.work_cycles_started &&
-      e.input.accepted_source_ref > 0
+      e.input.accepted_source_ref > 0 &&
+      e.state instanceof Running
     );
   }
   if (s instanceof Finalization) {

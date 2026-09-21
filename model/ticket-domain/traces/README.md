@@ -77,15 +77,15 @@ has no `--mbt`, so a scenario's inputs come from its `run` definition.
 
 `ticket.qnt` declares no Quint `action`s — it is pure functions over these
 types — so coverage is measured over the decision outcomes and lifecycle phases
-the command paths produce. Over the 29 traces: `TicketEvent` 18/18,
-`TicketState` 7/7, `TicketRefusal` 11/15. `index.json` holds the live tables.
+the command paths produce. Over the 26 traces: `TicketEvent` 18/18,
+`TicketState` 7/7, `TicketRefusal` 10/13. `index.json` holds the live tables.
 
-Never exercised: `SelfDependency`, `DispatchSourceRepositoryMismatch`,
-`TaskNotCurrent`, `FinalizationNotCurrent`.
-The middle two are asserted inside `check(decide(...) == TicketRefused(...))`,
+Never exercised: `SelfDependency`, `TaskNotCurrent`, `FinalizationNotCurrent`.
+The latter two are asserted inside `check(decide(...) == TicketRefused(...))`,
 which by construction leaves `lastDecision` untouched, so the refusal never
-reaches a trace; the other two appear in no scenario at all. **Replaying these
-traces does not test those four refusals** — they need direct `decide` tests.
+reaches a trace; `SelfDependency` appears in no scenario at all. **Replaying
+these traces does not test those three refusals** — they need direct `decide`
+tests.
 
 Names drop the `Test` suffix, decisions the `Ticket` prefix; equal runs collapse.
 
@@ -122,8 +122,9 @@ Seeds chosen by set cover: random walks mostly churn in `Pending`/`Revoked`.
 | `0x07` | 26 | Escalated, Pending, Work | 8 |
 | `0x28` | 26 | Evaluation, Pending, Revoked, Work | 9 |
 
-The `requiredCapabilitiesPreserved` scenario records nonempty, distinct work
-and evaluator capability sets through a pending revision, dispatch, work
-failure/resume, evaluation rework, and evaluator unavailability/resume. The
-scenario rejects an attempted active-ticket revision and an empty capability
-name. No execution mode or provider placement state is modeled.
+The `executionRequirementsPreserved` scenario records distinct work and
+evaluator execution-requirement references through a pending revision,
+dispatch, work failure/resume, evaluation rework, and evaluator
+unavailability/resume. The scenario rejects an attempted active-ticket revision
+and an absent requirements reference. The reference is opaque: no capability,
+execution mode, or provider placement state is modeled.

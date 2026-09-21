@@ -103,9 +103,10 @@ scenario steps are in that class, no simulation step is:
 
 `npx vitest run tests-ts/conformance` runs the harness.
 
-The required-capabilities scenario preserves distinct nonempty work and evaluator
-sets across pending revision, dispatch, work recovery, rework, and evaluator
-recovery. Conversion requires the field and retains every capability; it cannot
-satisfy replay by dropping the placement data. Three steps in this scenario are
+The execution-requirements scenario preserves distinct work and evaluator
+references across pending revision, dispatch, work recovery, rework, and
+evaluator recovery. Conversion requires the field and carries the reference
+unread; it cannot satisfy replay by dropping the placement data. Three steps in
+this scenario are
 evolve-only: the initial state assertion and the refused active-ticket update
 plus its repeated check.
