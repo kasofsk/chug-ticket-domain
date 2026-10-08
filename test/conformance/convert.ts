@@ -117,11 +117,12 @@ import {
   TicketAlreadyExists,
   DependenciesNotFound,
   SelfDependency,
+  DependenciesRevoked,
+  DependencyCycle,
   TicketNotFound,
   TicketNotPending,
   TicketIdentityMismatch,
   TicketRevisionStale,
-  TicketDependenciesChanged,
   DependenciesIncomplete,
   TicketNotRevocable,
   TicketNotResumable,
@@ -643,11 +644,25 @@ function parse_TicketRevisionStale(v: Value): TicketRevisionStale {
     integer(r["current"]!),
   );
 }
-function parse_TicketDependenciesChanged(v: Value): TicketDependenciesChanged {
-  if (!(v instanceof Variant) || v.tag !== "TicketDependenciesChanged")
-    throw new ConversionError("expected TicketDependenciesChanged variant");
+function parse_DependenciesRevoked(v: Value): DependenciesRevoked {
+  if (!(v instanceof Variant) || v.tag !== "DependenciesRevoked")
+    throw new ConversionError("expected DependenciesRevoked variant");
   const payload = v.value;
-  return new TicketDependenciesChanged(parse_TicketId(payload));
+  const r = record(payload, ["ticket", "dependencies"]);
+  return new DependenciesRevoked(
+    parse_TicketId(r["ticket"]!),
+    new Set(set(r["dependencies"]!).map((item) => parse_TicketId(item))),
+  );
+}
+function parse_DependencyCycle(v: Value): DependencyCycle {
+  if (!(v instanceof Variant) || v.tag !== "DependencyCycle")
+    throw new ConversionError("expected DependencyCycle variant");
+  const payload = v.value;
+  const r = record(payload, ["ticket", "dependencies"]);
+  return new DependencyCycle(
+    parse_TicketId(r["ticket"]!),
+    new Set(set(r["dependencies"]!).map((item) => parse_TicketId(item))),
+  );
 }
 function parse_DependenciesIncomplete(v: Value): DependenciesIncomplete {
   if (!(v instanceof Variant) || v.tag !== "DependenciesIncomplete")
@@ -1107,8 +1122,10 @@ function parse_TicketRefusal(v: Value): TicketRefusal {
       return parse_TicketIdentityMismatch(v);
     case "TicketRevisionStale":
       return parse_TicketRevisionStale(v);
-    case "TicketDependenciesChanged":
-      return parse_TicketDependenciesChanged(v);
+    case "DependenciesRevoked":
+      return parse_DependenciesRevoked(v);
+    case "DependencyCycle":
+      return parse_DependencyCycle(v);
     case "DependenciesIncomplete":
       return parse_DependenciesIncomplete(v);
     case "TicketNotRevocable":
