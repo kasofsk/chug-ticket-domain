@@ -95,11 +95,13 @@ inability is not. Function names are `snake_case`.
   step as a decision.
 - A `check(...)` step re-emits the previous decision unchanged. Drive
   simulations from `steps()`, not `decisions()`, which collapses them.
-- 20 of 345 steps are *evolve-only*: the trace does not determine the command,
+- 31 of the steps are *evolve-only*: the trace does not determine the command,
   so only the state assertions run. Their `decide` coverage has to come from
   direct tests in `test/domain.test.ts`.
-- Replaying the traces does **not** cover `SelfDependency`, `TaskNotCurrent` or
-  `FinalizationNotCurrent`; those need direct `decide` tests.
+- Replaying the traces does **not** cover `SelfDependency`,
+  `DependenciesRevoked`, `DependencyCycle`, `TaskNotCurrent` or
+  `FinalizationNotCurrent` reliably: a scenario's refusal is evolve-only, and
+  the simulations reach them only by chance. They need direct `decide` tests.
 - Compare maps and sets by content (`equal` from `task.ts`), never by the order
   a trace file lists them.
 

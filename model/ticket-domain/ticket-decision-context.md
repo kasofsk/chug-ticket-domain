@@ -17,26 +17,28 @@ For example, creating a ticket with no dependencies requires only these facts:
 - the released ticket definition is valid.
 
 No existing ticket lifecycle state is relevant. Creating a ticket with
-dependencies additionally requires proof that each named dependency exists.
-Because forward references are forbidden, requiring dependencies to exist at
-admission also prevents a newly admitted ticket from introducing a cycle.
+dependencies additionally requires proof that each named dependency exists and
+is not Revoked. A newly admitted ticket cannot introduce a cycle, because no
+ticket can yet depend on an identity that does not exist.
 
 Other commands also have narrow decision contexts:
 
 | Command | Required domain state |
 | --- | --- |
 | Create without dependencies | Absence of the proposed ticket identity |
-| Create with dependencies | Identity absence and existence of each dependency |
-| Update | The named ticket: its phase, its revision, and its dependency set |
+| Create with dependencies | Identity absence, and existence and state of each dependency |
+| Update | The named ticket: its phase, its revision and its dependency set; for each dependency it adds, that ticket's existence, its state and whether it reaches the named ticket |
 | Dispatch | The named ticket and current state of its direct dependencies |
 | Revoke or resume | The named ticket |
 | Report task terminal | The named ticket |
 | Report finalization result | The named ticket |
 
-Update has the narrowest context of the definition-bearing commands. It reads
-one ticket and nothing else: no dependency lifecycle state, because a revision
-may not change the dependency set, and no other ticket, because the definition
-it carries is already whole and valid on its own. The ticket's revision is the
+An update that keeps the dependency set reads one ticket and nothing else,
+because the definition it carries is already whole and valid on its own. One
+that adds a dependency also reads that dependency's state and its transitive
+dependencies, because an added edge can close a cycle through tickets the
+update does not otherwise name; removing a dependency reads nothing more. The
+ticket's revision is the
 concurrency token that makes the read sufficient — an update authored against a
 definition that has since been replaced is refused with the current revision
 rather than merged.
@@ -51,7 +53,7 @@ project-local facts by responsibility:
 
 ```text
 Ticket                    one lifecycle aggregate
-TicketDependencyIndex     ticket identities and immutable dependency edges
+TicketDependencyIndex     ticket identities and dependency edges
 SettledInputIndex         application idempotency and attribution
 ```
 
@@ -92,12 +94,14 @@ They ensure that identity admission, dependency reads, and the changed ticket
 state are based on one committed project order.
 
 Within that order, dependency is the only cross-ticket relationship. Dispatch
-loads the target ticket and the current states of exactly its immediate,
-immutable dependencies. It does not need every unrelated ticket or a transitive
+loads the target ticket and the current states of exactly its immediate
+dependencies. It does not need every unrelated ticket or a transitive
 dependency traversal: a dependency can reach `Done` only through its own valid
 lifecycle decisions, and `Done` cannot later be revoked. Create needs only
-proof that its identity is absent and that its named dependencies exist at the
-same committed position.
+proof that its identity is absent and that its named dependencies exist and are
+not Revoked at the same committed position. An update that adds a dependency
+is the one decision that traverses the graph transitively, from each added
+dependency, to refuse a cycle.
 
 The current full replay exists because the outcome journal is the only durable
 source from which decision state and settled-input attribution are rebuilt. It
@@ -111,7 +115,7 @@ responsibility:
 
 - complete ticket aggregates keyed by `TicketId`, including each released
   definition, lifecycle state, counters, and embedded protocol state;
-- project-local ticket identities and immutable dependency edges;
+- project-local ticket identities and dependency edges;
 - exact settled `AcceptedInput` attribution keyed by `InputId`; and
 - an anchored prefix proof binding the project, dense project position,
   materialization schema version, opaque adapter cursor, and exact identity and

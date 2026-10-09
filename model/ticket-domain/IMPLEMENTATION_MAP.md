@@ -11,6 +11,7 @@ The executable specification is `task-contract/task.qnt`, `ticket-domain/evaluat
 | `ReleasedTicket`, `WorkInput`, `FinalizationOperation` | Same classes in `src/ticket.ts` |
 | `TaskTerminalReport` variants | `WorkResultReport`, `EvaluationResultReport`, `TerminalFailureReport` |
 | `decide`, `evolve`, `applyDecision`, `graphInvariant` | `decide`, `evolve`, `apply_decision`, `graph_invariant` |
+| `decideDependencies`, `dependencyClosure` | `decide_dependencies`, `_dependency_closure` in `src/ticket.ts`; the success decision is passed in rather than returned as an option |
 | `finalizationCurrent` | `_finalization_current` in `src/ticket.ts`; guards both the finalization refusal and the three finalization `evolve` branches |
 | `reportAdmissible` | inlined as `task_current(...)` in the evaluation branches of `_evolve` in `src/ticket.ts` |
 

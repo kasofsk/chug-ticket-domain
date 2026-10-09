@@ -188,3 +188,39 @@ test("failure reports contain evidence without a result interpretation", () => {
     k.Escalated,
   );
 });
+
+test("an update refuses a dependency it adds unless that dependency is live and acyclic", () => {
+  const ids = (...n: number[]) => new Set(n.map(t.TicketId));
+  const update = (ticket: number, revision: number, deps: Set<t.TicketId>) =>
+    new k.UpdateTicket(
+      t.TicketId(ticket),
+      revision,
+      b.released(ticket, deps, true),
+    );
+  const driver = new b.Driver();
+  driver.submit(new k.CreateTicket(b.released(1)));
+  driver.submit(new k.CreateTicket(b.released(2, ids(1))));
+  driver.submit(new k.CreateTicket(b.released(3)));
+  expect(driver.submit(update(2, 1, ids(2)))).toEqual(
+    new k.TicketRefused(new k.SelfDependency(t.TicketId(2))),
+  );
+  expect(driver.submit(update(2, 1, ids(1, 9)))).toEqual(
+    new k.TicketRefused(new k.DependenciesNotFound(t.TicketId(2), ids(9))),
+  );
+  expect(driver.submit(update(1, 1, ids(3, 2)))).toEqual(
+    new k.TicketRefused(new k.DependencyCycle(t.TicketId(1), ids(2))),
+  );
+  driver.submit(new k.RevokeTicket(t.TicketId(1)));
+  expect(driver.submit(new k.CreateTicket(b.released(4, ids(1))))).toEqual(
+    new k.TicketRefused(new k.DependenciesRevoked(t.TicketId(4), ids(1))),
+  );
+  expect(driver.submit(update(3, 1, ids(1)))).toEqual(
+    new k.TicketRefused(new k.DependenciesRevoked(t.TicketId(3), ids(1))),
+  );
+  expect(driver.submit(update(2, 1, ids(1)))).toBeInstanceOf(k.TicketDecided);
+  expect(driver.submit(update(2, 2, ids(3)))).toBeInstanceOf(k.TicketDecided);
+  expect(
+    driver.graph.tickets.get(t.TicketId(2))!.definition.dependencies,
+  ).toEqual(ids(3));
+  expect(k.graph_invariant(driver.graph)).toBe(true);
+});

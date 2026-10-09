@@ -32,6 +32,23 @@ function simulation(action: string, prior: k.TicketGraph): k.TicketCommand {
         prior.tickets.get(t.TicketId(1))?.revision ?? 1,
         b.released(1, new Set(), true),
       );
+    case "updateOneOnTwo":
+      return new k.UpdateTicket(
+        t.TicketId(1),
+        prior.tickets.get(t.TicketId(1))?.revision ?? 1,
+        b.released(1, new Set([t.TicketId(2)]), true),
+      );
+    case "updateTwoFree":
+    case "updateTwoOnOne":
+      return new k.UpdateTicket(
+        t.TicketId(2),
+        prior.tickets.get(t.TicketId(2))?.revision ?? 1,
+        b.released(
+          2,
+          new Set(action === "updateTwoOnOne" ? [t.TicketId(1)] : []),
+          true,
+        ),
+      );
     case "dispatchOne":
       return b.dispatch(1);
     case "dispatchTwo":

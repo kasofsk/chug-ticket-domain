@@ -475,6 +475,26 @@ export class DependenciesNotFound {
   }
 }
 
+export class DependenciesRevoked {
+  readonly kind = "DependenciesRevoked";
+  constructor(
+    readonly ticket: TicketId,
+    readonly dependencies: ReadonlySet<TicketId>,
+  ) {
+    Object.freeze(this);
+  }
+}
+
+export class DependencyCycle {
+  readonly kind = "DependencyCycle";
+  constructor(
+    readonly ticket: TicketId,
+    readonly dependencies: ReadonlySet<TicketId>,
+  ) {
+    Object.freeze(this);
+  }
+}
+
 export class SelfDependency {
   readonly kind = "SelfDependency";
   constructor(readonly ticket: TicketId) {
@@ -510,13 +530,6 @@ export class TicketRevisionStale {
     readonly expected: number,
     readonly current: number,
   ) {
-    Object.freeze(this);
-  }
-}
-
-export class TicketDependenciesChanged {
-  readonly kind = "TicketDependenciesChanged";
-  constructor(readonly ticket: TicketId) {
     Object.freeze(this);
   }
 }
@@ -569,12 +582,13 @@ export class FinalizationNotCurrent {
 export type TicketRefusal =
   | TicketAlreadyExists
   | DependenciesNotFound
+  | DependenciesRevoked
+  | DependencyCycle
   | SelfDependency
   | TicketNotFound
   | TicketNotPending
   | TicketIdentityMismatch
   | TicketRevisionStale
-  | TicketDependenciesChanged
   | DependenciesIncomplete
   | TicketNotRevocable
   | TicketNotResumable
@@ -1032,6 +1046,24 @@ function decided(
 ): TicketDecision {
   return new TicketDecided(e, obligations);
 }
+function decide_dependencies(
+  g: TicketGraph,
+  id: TicketId,
+  added: ReadonlySet<TicketId>,
+  accepted: TicketDecision,
+): TicketDecision {
+  if (added.has(id)) return refuse(new SelfDependency(id));
+  const missing = new Set([...added].filter((d) => !g.tickets.has(d)));
+  if (missing.size) return refuse(new DependenciesNotFound(id, missing));
+  const revoked = new Set(
+    [...added].filter((d) => g.tickets.get(d)!.state.kind === "Revoked"),
+  );
+  if (revoked.size) return refuse(new DependenciesRevoked(id, revoked));
+  const cyclic = new Set(
+    [...added].filter((d) => _dependency_closure(g, d).has(id)),
+  );
+  return cyclic.size ? refuse(new DependencyCycle(id, cyclic)) : accepted;
+}
 export function decide(
   g: TicketGraph,
   c: TicketCommand,
@@ -1040,13 +1072,12 @@ export function decide(
   if (c instanceof CreateTicket) {
     const d = c.definition;
     if (g.tickets.has(d.id)) return refuse(new TicketAlreadyExists(d.id));
-    if (d.dependencies.has(d.id)) return refuse(new SelfDependency(d.id));
-    const missing = new Set(
-      [...d.dependencies].filter((id) => !g.tickets.has(id)),
+    return decide_dependencies(
+      g,
+      d.id,
+      d.dependencies,
+      decided(new TicketCreated(d)),
     );
-    return missing.size
-      ? refuse(new DependenciesNotFound(d.id, missing))
-      : decided(new TicketCreated(d));
   }
   const id =
       c instanceof ReportTaskTerminal || c instanceof ReportFinalizationResult
@@ -1061,9 +1092,16 @@ export function decide(
       return refuse(
         new TicketRevisionStale(id, c.expected_revision, t.revision),
       );
-    if (!equal(c.definition.dependencies, t.definition.dependencies))
-      return refuse(new TicketDependenciesChanged(id));
-    return decided(new TicketUpdated(id, t.revision + 1, c.definition));
+    return decide_dependencies(
+      g,
+      id,
+      new Set(
+        [...c.definition.dependencies].filter(
+          (d) => !t.definition.dependencies.has(d),
+        ),
+      ),
+      decided(new TicketUpdated(id, t.revision + 1, c.definition)),
+    );
   }
   if (c instanceof DispatchTicket) {
     if (!is_pending(t.state)) return refuse(new TicketNotPending(id));

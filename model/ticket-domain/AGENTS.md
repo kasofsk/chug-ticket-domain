@@ -16,8 +16,9 @@ This directory is the pure, project-partitioned ticket domain. Read
 - Domain decision contexts may rely on the application guarantee that exactly
   one writer serializes all ticket decisions for a project. This does not make
   the graph one aggregate: a lifecycle decision changes one ticket, and its
-  only cross-ticket facts are the current states of its immediate immutable
-  dependencies.
+  only cross-ticket facts are the current states of its immediate
+  dependencies and, for a dependency a create or update adds, whether that
+  dependency reaches the ticket.
 - Evaluation is an embedded pure protocol, not a second aggregate. It owns
   stages, evaluator task identities, reduction, and its single conclusive
   result; the ticket lifecycle interprets that result.
