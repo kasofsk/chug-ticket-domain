@@ -81,6 +81,12 @@ function simulation(action: string, prior: k.TicketGraph): k.TicketCommand {
         1,
         new k.FinalizationNeedsWork(t.ContentRef(506)),
       );
+    case "restartFinalizationOne":
+      return b.finalization_command(
+        prior,
+        1,
+        new k.FinalizationRestart(t.ContentRef(510), t.ContentRef(1001)),
+      );
     case "unavailableFinalizationOne":
       return b.finalization_command(
         prior,
@@ -141,6 +147,7 @@ function event_command(e: k.TicketEvent): Reconstructed {
       break;
     case "TicketFinalizationSucceeded":
     case "TicketFinalizationNeedsWork":
+    case "TicketFinalizationRestarted":
     case "TicketFinalizationUnavailable":
       command = new k.ReportFinalizationResult(
         new k.FinalizationResultReport(
@@ -151,7 +158,9 @@ function event_command(e: k.TicketEvent): Reconstructed {
             ? new k.FinalizationSucceeded(e.evidence)
             : e instanceof k.TicketFinalizationNeedsWork
               ? new k.FinalizationNeedsWork(e.evidence)
-              : new k.FinalizationResultUnavailable(e.evidence),
+              : e instanceof k.TicketFinalizationRestarted
+                ? new k.FinalizationRestart(e.evidence, e.source)
+                : new k.FinalizationResultUnavailable(e.evidence),
         ),
       );
       break;

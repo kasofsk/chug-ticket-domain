@@ -146,6 +146,7 @@ import {
   TicketEvaluationBlocked,
   TicketFinalizationSucceeded,
   TicketFinalizationNeedsWork,
+  TicketFinalizationRestarted,
   TicketFinalizationUnavailable,
   TicketEvent,
   ExecuteTask,
@@ -883,6 +884,27 @@ function parse_TicketFinalizationNeedsWork(
     parse_ContentRef(r["evidence"]!),
   );
 }
+function parse_TicketFinalizationRestarted(
+  v: Value,
+): TicketFinalizationRestarted {
+  if (!(v instanceof Variant) || v.tag !== "TicketFinalizationRestarted")
+    throw new ConversionError("expected TicketFinalizationRestarted variant");
+  const payload = v.value;
+  const r = record(payload, [
+    "ticket",
+    "workCycle",
+    "generation",
+    "evidence",
+    "source",
+  ]);
+  return new TicketFinalizationRestarted(
+    parse_TicketId(r["ticket"]!),
+    parse_CycleNumber(r["workCycle"]!),
+    parse_Generation(r["generation"]!),
+    parse_ContentRef(r["evidence"]!),
+    parse_ContentRef(r["source"]!),
+  );
+}
 function parse_TicketFinalizationUnavailable(
   v: Value,
 ): TicketFinalizationUnavailable {
@@ -1177,6 +1199,8 @@ function parse_TicketEvent(v: Value): TicketEvent {
       return parse_TicketFinalizationSucceeded(v);
     case "TicketFinalizationNeedsWork":
       return parse_TicketFinalizationNeedsWork(v);
+    case "TicketFinalizationRestarted":
+      return parse_TicketFinalizationRestarted(v);
     case "TicketFinalizationUnavailable":
       return parse_TicketFinalizationUnavailable(v);
     default:

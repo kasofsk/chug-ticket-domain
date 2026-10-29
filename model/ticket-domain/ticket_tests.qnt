@@ -703,6 +703,55 @@ module ticket_tests {
       .then(check(ticketDone(1)))
   }
 
+  run finalizationRestartTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(reportWorkResultWithSource(1, 1301, 1399))
+      .then(reportEvaluatorResult(1, 1311, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 1312, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 1321, EvaluatorPass))
+      .then(reportFinalization(1, FinalizationRestart({
+        evidence: 1331,
+        source: 1001,
+      })))
+      .then(check(lastDecision == TicketDecided({
+        event: TicketFinalizationRestarted({
+          ticket: 1,
+          workCycle: 1,
+          generation: 1,
+          evidence: 1331,
+          source: 1001,
+        }),
+        obligations: [ExecuteTask({
+          ticket: 1,
+          task: workTaskObligation(
+            graph.tickets.get(1),
+            2,
+            1001,
+            finalizationReworkInput(graph.tickets.get(1).definition, 1331),
+          ),
+        })],
+      })))
+      .then(check(ticketWorkCycle(1, 2)))
+      .then(check(workUsesSource(1, 1001)))
+      .then(check(match graph.tickets.get(1).state {
+        | Work(work) => work.input.cause == FinalizationRework(1331)
+        | _ => false
+      }))
+      .then(reportWorkResultWithSource(1, 1302, 1398))
+      .then(reportEvaluatorResult(1, 1341, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 1342, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 1351, EvaluatorPass))
+      .then(check(match graph.tickets.get(1).state {
+        | Finalization(operation) =>
+            operation.workCycle == 2 and operation.source == 1398
+        | _ => false
+      }))
+      .then(reportFinalization(1, FinalizationSucceeded(1361)))
+      .then(check(ticketDone(1)))
+  }
+
   run revocationLeavesDependentsBlockedTest = {
     init
       .then(submit(CreateTicket(released(1, Set()))))
@@ -819,6 +868,23 @@ module ticket_tests {
         generation: 1,
         evidence: 1041,
       })) == graph))
+      .then(check(decide(graph, ReportFinalizationResult({
+        ticket: 1,
+        workCycle: 1,
+        generation: 1,
+        result: FinalizationRestart({ evidence: 1041, source: 1001 }),
+      }), reworkPolicy) == TicketRefused(FinalizationNotCurrent({
+        ticket: 1,
+        workCycle: 1,
+        generation: 1,
+      }))))
+      .then(check(evolve(graph, TicketFinalizationRestarted({
+        ticket: 1,
+        workCycle: 1,
+        generation: 1,
+        evidence: 1041,
+        source: 1001,
+      })) == graph))
       .then(reportFinalization(1, FinalizationSucceeded(1042)))
       .then(check(ticketDone(1)))
   }
@@ -829,6 +895,12 @@ module ticket_tests {
       workCycle: 1,
       generation: 1,
       result: FinalizationNeedsWork(0),
+    })
+    val absentRestartSource = ReportFinalizationResult({
+      ticket: 1,
+      workCycle: 1,
+      generation: 1,
+      result: FinalizationRestart({ evidence: 1231, source: 0 }),
     })
     init
       .then(submit(CreateTicket(released(1, Set()))))
@@ -842,6 +914,10 @@ module ticket_tests {
       .then(check(
         not(graphInvariant(applyCommand(graph, absentEvidence, reworkPolicy)))
       ))
+      .then(check(not(commandValid(absentRestartSource))))
+      .then(check(not(graphInvariant(
+        applyCommand(graph, absentRestartSource, reworkPolicy)
+      ))))
   }
 
   run evolveRejectsMispairedEvaluationTest = {
@@ -990,6 +1066,8 @@ module ticket_tests {
     reportFinalization(1, FinalizationNeedsWork(506))
   action unavailableFinalizationOne =
     reportFinalization(1, FinalizationResultUnavailable(507))
+  action restartFinalizationOne =
+    reportFinalization(1, FinalizationRestart({ evidence: 510, source: 1001 }))
 
   action step = any {
     createOne,
@@ -1010,6 +1088,7 @@ module ticket_tests {
     unavailableEvaluatorOne,
     completeFinalizationOne,
     reworkFinalizationOne,
+    restartFinalizationOne,
     unavailableFinalizationOne,
   }
 }

@@ -18,8 +18,8 @@ data that is valid in that phase.
             dispatch                 result accepted          all stages pass
  Pending ────────────────▶ Work ─────────────────▶ Evaluation ────────────────▶ Finalization ──▶ Done
  (waits on                   ▲                         │                             │
-  dependencies)              │   rework                │ failed (policy chooses      │ needs work
-                             ├─────────────────────────┤  rework or escalate)        │
+  dependencies)              │   rework                │ failed (policy chooses      │ needs work /
+                             ├─────────────────────────┤  rework or escalate)        │ restart
                              └───────────────────────────────────────────────────────┘
 
  Escalated  ◀── work failure / execution unavailable / evaluation failed or blocked /
@@ -41,7 +41,9 @@ data that is valid in that phase.
 - **Finalization.** Finalization applies the accepted result to an external
   destination. It has its own authority and generation counter because it
   mutates something outside the domain. It ends as `Succeeded`, `NeedsWork`
-  (which starts another work cycle) or `Unavailable` (which escalates).
+  (which starts another work cycle from the accepted source), `Restart` (which
+  starts another work cycle from an earlier source the report names) or
+  `Unavailable` (which escalates).
 - **Escalated.** The ticket is waiting for an operator. Resuming it starts a new
   work cycle, re-runs the blocked evaluators at a new generation, or retries
   finalization at a new generation.

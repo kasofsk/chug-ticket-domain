@@ -12,7 +12,9 @@ The executable specification is `task-contract/task.qnt`, `ticket-domain/evaluat
 | `TaskTerminalReport` variants | `WorkResultReport`, `EvaluationResultReport`, `TerminalFailureReport` |
 | `decide`, `evolve`, `applyDecision`, `graphInvariant` | `decide`, `evolve`, `apply_decision`, `graph_invariant` |
 | `decideDependencies`, `dependencyClosure` | `decide_dependencies`, `_dependency_closure` in `src/ticket.ts`; the success decision is passed in rather than returned as an option |
-| `finalizationCurrent` | `_finalization_current` in `src/ticket.ts`; guards both the finalization refusal and the three finalization `evolve` branches |
+| `finalizationCurrent` | `_finalization_current` in `src/ticket.ts`; guards both the finalization refusal and the four finalization `evolve` branches |
+| `FinalizationResult` variants, `FinalizationRestartResult` | `FinalizationSucceeded`, `FinalizationNeedsWork`, `FinalizationRestart(evidence, source)`, `FinalizationResultUnavailable`; the restart's record is flattened into the class |
+| `TicketFinalizationRestarted(FinalizationRestartFact)` | `TicketFinalizationRestarted(ticket, work_cycle, generation, evidence, source)` |
 | `reportAdmissible` | inlined as `task_current(...)` in the evaluation branches of `_evolve` in `src/ticket.ts` |
 
 A released ticket pins its content reference and nothing else about its material: task inputs are `workConfiguration.inputs` and each evaluator's `task.inputs`, so `WorkInput.released` is that one content reference rather than a record.

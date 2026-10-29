@@ -224,3 +224,91 @@ test("an update refuses a dependency it adds unless that dependency is live and 
   ).toEqual(ids(3));
   expect(k.graph_invariant(driver.graph)).toBe(true);
 });
+
+function finalizing(sourceRef: number): b.Driver {
+  const driver = started();
+  driver.submit(producedWork(driver.graph, 501, sourceRef));
+  for (const ref of [601, 602, 603]) {
+    const state = driver.graph.tickets.get(t.TicketId(1))!.state;
+    if (!(state instanceof k.Evaluation))
+      throw new Error("evaluation ended early");
+    driver.submit(
+      new k.ReportTaskTerminal(
+        new k.EvaluationResultReport(
+          t.TicketId(1),
+          new t.ValidatedTaskResult(
+            e.current_task_obligations(state.evaluation)[0]!,
+            t.ContentRef(ref),
+          ),
+          new e.EvaluatorPass(),
+        ),
+      ),
+    );
+  }
+  return driver;
+}
+
+test("a finalization restart starts the next work cycle from the source it names", () => {
+  const driver = finalizing(991);
+  const decision = driver.submit(
+    b.finalization_command(
+      driver.graph,
+      1,
+      new k.FinalizationRestart(t.ContentRef(701), t.ContentRef(1001)),
+    ),
+  );
+  expect(decision).toBeInstanceOf(k.TicketDecided);
+  if (!(decision instanceof k.TicketDecided)) return;
+  expect(decision.event).toEqual(
+    new k.TicketFinalizationRestarted(
+      t.TicketId(1),
+      t.CycleNumber(1),
+      t.Generation(1),
+      t.ContentRef(701),
+      t.ContentRef(1001),
+    ),
+  );
+  expect(decision.obligations).toHaveLength(1);
+  expect(decision.obligations[0]).toBeInstanceOf(k.ExecuteTask);
+  const ticket = driver.graph.tickets.get(t.TicketId(1))!;
+  expect(ticket.work_cycles_started).toBe(2);
+  expect(ticket.state).toBeInstanceOf(k.Work);
+  if (!(ticket.state instanceof k.Work)) return;
+  expect(ticket.state.execution.source).toBe(1001);
+  expect(ticket.state.execution.input.cause).toEqual(
+    new k.FinalizationRework(t.ContentRef(701)),
+  );
+});
+
+test("a finalization restart for a superseded generation is refused", () => {
+  const driver = finalizing(991);
+  driver.submit(
+    b.finalization_command(
+      driver.graph,
+      1,
+      new k.FinalizationResultUnavailable(t.ContentRef(702)),
+    ),
+  );
+  driver.submit(new k.ResumeTicket(t.TicketId(1)));
+  const before = driver.graph;
+  const decision = driver.submit(
+    new k.ReportFinalizationResult(
+      new k.FinalizationResultReport(
+        t.TicketId(1),
+        t.CycleNumber(1),
+        t.Generation(1),
+        new k.FinalizationRestart(t.ContentRef(703), t.ContentRef(1001)),
+      ),
+    ),
+  );
+  expect(decision).toEqual(
+    new k.TicketRefused(
+      new k.FinalizationNotCurrent(
+        t.TicketId(1),
+        t.CycleNumber(1),
+        t.Generation(1),
+      ),
+    ),
+  );
+  expect(driver.graph).toBe(before);
+});

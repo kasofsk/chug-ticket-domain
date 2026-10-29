@@ -30,6 +30,7 @@
         "TicketEvaluationBlocked",
         "TicketFinalizationSucceeded",
         "TicketFinalizationNeedsWork",
+        "TicketFinalizationRestarted",
         "TicketFinalizationUnavailable"
       ],
       "unexercised": []
@@ -2345,6 +2346,221 @@
       ]
     },
     {
+      "file": "scenario-finalizationRestartTest.itf.json",
+      "kind": "scenario",
+      "scenario": "finalizationRestartTest",
+      "states": 19,
+      "steps": [
+        {
+          "index": 0,
+          "action": null,
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {}
+        },
+        {
+          "index": 1,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketCreated"
+          },
+          "tickets": {
+            "1": "Pending"
+          }
+        },
+        {
+          "index": 2,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketDispatched"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 3,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketWorkResultAccepted"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 4,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 5,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 6,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationPassed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 7,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationRestarted"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 8,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationRestarted"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 9,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationRestarted"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 10,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationRestarted"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 11,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationRestarted"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 12,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketWorkResultAccepted"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 13,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 14,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 15,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationPassed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 16,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationPassed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 17,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationSucceeded"
+          },
+          "tickets": {
+            "1": "Done"
+          }
+        },
+        {
+          "index": 18,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationSucceeded"
+          },
+          "tickets": {
+            "1": "Done"
+          }
+        }
+      ]
+    },
+    {
       "file": "scenario-revocationLeavesDependentsBlockedTest.itf.json",
       "kind": "scenario",
       "scenario": "revocationLeavesDependentsBlockedTest",
@@ -2673,7 +2889,7 @@
       "file": "scenario-staleFinalizationIsRefusedTest.itf.json",
       "kind": "scenario",
       "scenario": "staleFinalizationIsRefusedTest",
-      "states": 18,
+      "states": 20,
       "steps": [
         {
           "index": 0,
@@ -2854,6 +3070,28 @@
           "action": null,
           "decision": {
             "outcome": "decided",
+            "tag": "TicketFinalizationResumed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 17,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationResumed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 18,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
             "tag": "TicketFinalizationSucceeded"
           },
           "tickets": {
@@ -2861,7 +3099,7 @@
           }
         },
         {
-          "index": 17,
+          "index": 19,
           "action": null,
           "decision": {
             "outcome": "decided",
@@ -2877,7 +3115,7 @@
       "file": "scenario-finalizationResultContractTest.itf.json",
       "kind": "scenario",
       "scenario": "finalizationResultContractTest",
-      "states": 10,
+      "states": 12,
       "steps": [
         {
           "index": 0,
@@ -2978,6 +3216,28 @@
         },
         {
           "index": 9,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationPassed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 10,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationPassed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 11,
           "action": null,
           "decision": {
             "outcome": "decided",
@@ -3385,16 +3645,16 @@
         },
         {
           "index": 1,
-          "action": "updateOneOnTwo",
+          "action": "createTwo",
           "decision": {
             "outcome": "refused",
-            "tag": "TicketNotFound"
+            "tag": "DependenciesNotFound"
           },
           "tickets": {}
         },
         {
           "index": 2,
-          "action": "dispatchOne",
+          "action": "updateTwoOnOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
@@ -3403,7 +3663,7 @@
         },
         {
           "index": 3,
-          "action": "dispatchOne",
+          "action": "updateTwoOnOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
@@ -3412,7 +3672,7 @@
         },
         {
           "index": 4,
-          "action": "resumeOne",
+          "action": "updateOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
@@ -3421,7 +3681,7 @@
         },
         {
           "index": 5,
-          "action": "updateTwoFree",
+          "action": "resumeOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
@@ -3430,7 +3690,7 @@
         },
         {
           "index": 6,
-          "action": "updateTwoOnOne",
+          "action": "resumeOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
@@ -3448,51 +3708,6 @@
         },
         {
           "index": 8,
-          "action": "revokeOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {}
-        },
-        {
-          "index": 9,
-          "action": "updateOneOnTwo",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {}
-        },
-        {
-          "index": 10,
-          "action": "dispatchOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {}
-        },
-        {
-          "index": 11,
-          "action": "dispatchTwo",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {}
-        },
-        {
-          "index": 12,
-          "action": "updateTwoOnOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {}
-        },
-        {
-          "index": 13,
           "action": "updateTwoFree",
           "decision": {
             "outcome": "refused",
@@ -3501,8 +3716,8 @@
           "tickets": {}
         },
         {
-          "index": 14,
-          "action": "updateTwoOnOne",
+          "index": 9,
+          "action": "dispatchOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
@@ -3510,8 +3725,53 @@
           "tickets": {}
         },
         {
+          "index": 10,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {}
+        },
+        {
+          "index": 11,
+          "action": "createTwo",
+          "decision": {
+            "outcome": "refused",
+            "tag": "DependenciesNotFound"
+          },
+          "tickets": {}
+        },
+        {
+          "index": 12,
+          "action": "updateOneOnTwo",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {}
+        },
+        {
+          "index": 13,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {}
+        },
+        {
+          "index": 14,
+          "action": "createTwo",
+          "decision": {
+            "outcome": "refused",
+            "tag": "DependenciesNotFound"
+          },
+          "tickets": {}
+        },
+        {
           "index": 15,
-          "action": "dispatchTwo",
+          "action": "updateTwoOnOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
@@ -3520,7 +3780,7 @@
         },
         {
           "index": 16,
-          "action": "dispatchTwo",
+          "action": "updateOneOnTwo",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
@@ -3529,15 +3789,6 @@
         },
         {
           "index": 17,
-          "action": "createTwo",
-          "decision": {
-            "outcome": "refused",
-            "tag": "DependenciesNotFound"
-          },
-          "tickets": {}
-        },
-        {
-          "index": 18,
           "action": "resumeOne",
           "decision": {
             "outcome": "refused",
@@ -3546,25 +3797,7 @@
           "tickets": {}
         },
         {
-          "index": 19,
-          "action": "revokeOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {}
-        },
-        {
-          "index": 20,
-          "action": "createTwo",
-          "decision": {
-            "outcome": "refused",
-            "tag": "DependenciesNotFound"
-          },
-          "tickets": {}
-        },
-        {
-          "index": 21,
+          "index": 18,
           "action": "dispatchTwo",
           "decision": {
             "outcome": "refused",
@@ -3573,7 +3806,16 @@
           "tickets": {}
         },
         {
-          "index": 22,
+          "index": 19,
+          "action": "createTwo",
+          "decision": {
+            "outcome": "refused",
+            "tag": "DependenciesNotFound"
+          },
+          "tickets": {}
+        },
+        {
+          "index": 20,
           "action": "updateOne",
           "decision": {
             "outcome": "refused",
@@ -3582,31 +3824,62 @@
           "tickets": {}
         },
         {
-          "index": 23,
-          "action": "resumeOne",
+          "index": 21,
+          "action": "createOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketCreated"
+          },
+          "tickets": {
+            "1": "Pending"
+          }
+        },
+        {
+          "index": 22,
+          "action": "updateOneOnTwo",
           "decision": {
             "outcome": "refused",
-            "tag": "TicketNotFound"
+            "tag": "DependenciesNotFound"
           },
-          "tickets": {}
+          "tickets": {
+            "1": "Pending"
+          }
+        },
+        {
+          "index": 23,
+          "action": "createTwo",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketCreated"
+          },
+          "tickets": {
+            "1": "Pending",
+            "2": "Pending"
+          }
         },
         {
           "index": 24,
-          "action": "revokeOne",
+          "action": "createOne",
           "decision": {
             "outcome": "refused",
-            "tag": "TicketNotFound"
+            "tag": "TicketAlreadyExists"
           },
-          "tickets": {}
+          "tickets": {
+            "1": "Pending",
+            "2": "Pending"
+          }
         },
         {
           "index": 25,
           "action": "updateTwoOnOne",
           "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
+            "outcome": "decided",
+            "tag": "TicketUpdated"
           },
-          "tickets": {}
+          "tickets": {
+            "1": "Pending",
+            "2": "Pending"
+          }
         }
       ]
     },
@@ -3629,10 +3902,10 @@
         },
         {
           "index": 1,
-          "action": "createTwo",
+          "action": "dispatchOne",
           "decision": {
             "outcome": "refused",
-            "tag": "DependenciesNotFound"
+            "tag": "TicketNotFound"
           },
           "tickets": {}
         },
@@ -3649,61 +3922,6 @@
         },
         {
           "index": 3,
-          "action": "updateOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketUpdated"
-          },
-          "tickets": {
-            "1": "Pending"
-          }
-        },
-        {
-          "index": 4,
-          "action": "dispatchTwo",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {
-            "1": "Pending"
-          }
-        },
-        {
-          "index": 5,
-          "action": "resumeOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotResumable"
-          },
-          "tickets": {
-            "1": "Pending"
-          }
-        },
-        {
-          "index": 6,
-          "action": "createOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketAlreadyExists"
-          },
-          "tickets": {
-            "1": "Pending"
-          }
-        },
-        {
-          "index": 7,
-          "action": "resumeOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotResumable"
-          },
-          "tickets": {
-            "1": "Pending"
-          }
-        },
-        {
-          "index": 8,
           "action": "createTwo",
           "decision": {
             "outcome": "decided",
@@ -3715,43 +3933,7 @@
           }
         },
         {
-          "index": 9,
-          "action": "updateOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketUpdated"
-          },
-          "tickets": {
-            "1": "Pending",
-            "2": "Pending"
-          }
-        },
-        {
-          "index": 10,
-          "action": "updateTwoFree",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketUpdated"
-          },
-          "tickets": {
-            "1": "Pending",
-            "2": "Pending"
-          }
-        },
-        {
-          "index": 11,
-          "action": "dispatchTwo",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketDispatched"
-          },
-          "tickets": {
-            "1": "Pending",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 12,
+          "index": 4,
           "action": "revokeOne",
           "decision": {
             "outcome": "decided",
@@ -3759,27 +3941,147 @@
           },
           "tickets": {
             "1": "Revoked",
-            "2": "Work"
+            "2": "Pending"
           }
         },
         {
-          "index": 13,
+          "index": 5,
+          "action": "updateTwoOnOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketUpdated"
+          },
+          "tickets": {
+            "1": "Revoked",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 6,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotResumable"
+          },
+          "tickets": {
+            "1": "Revoked",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 7,
+          "action": "dispatchTwo",
+          "decision": {
+            "outcome": "refused",
+            "tag": "DependenciesIncomplete"
+          },
+          "tickets": {
+            "1": "Revoked",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 8,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotResumable"
+          },
+          "tickets": {
+            "1": "Revoked",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 9,
           "action": "updateTwoFree",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketUpdated"
+          },
+          "tickets": {
+            "1": "Revoked",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 10,
+          "action": "revokeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotRevocable"
+          },
+          "tickets": {
+            "1": "Revoked",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 11,
+          "action": "dispatchOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotPending"
           },
           "tickets": {
             "1": "Revoked",
-            "2": "Work"
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 12,
+          "action": "updateTwoOnOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "DependenciesRevoked"
+          },
+          "tickets": {
+            "1": "Revoked",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 13,
+          "action": "updateOneOnTwo",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotPending"
+          },
+          "tickets": {
+            "1": "Revoked",
+            "2": "Pending"
           }
         },
         {
           "index": 14,
-          "action": "createTwo",
+          "action": "updateOneOnTwo",
           "decision": {
             "outcome": "refused",
-            "tag": "TicketAlreadyExists"
+            "tag": "TicketNotPending"
+          },
+          "tickets": {
+            "1": "Revoked",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 15,
+          "action": "dispatchOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotPending"
+          },
+          "tickets": {
+            "1": "Revoked",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 16,
+          "action": "dispatchTwo",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketDispatched"
           },
           "tickets": {
             "1": "Revoked",
@@ -3787,7 +4089,7 @@
           }
         },
         {
-          "index": 15,
+          "index": 17,
           "action": "revokeOne",
           "decision": {
             "outcome": "refused",
@@ -3799,35 +4101,11 @@
           }
         },
         {
-          "index": 16,
-          "action": "updateTwoOnOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotPending"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 17,
-          "action": "dispatchTwo",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotPending"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
-          }
-        },
-        {
           "index": 18,
-          "action": "updateOne",
+          "action": "revokeOne",
           "decision": {
             "outcome": "refused",
-            "tag": "TicketNotPending"
+            "tag": "TicketNotRevocable"
           },
           "tickets": {
             "1": "Revoked",
@@ -3836,18 +4114,6 @@
         },
         {
           "index": 19,
-          "action": "updateOneOnTwo",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotPending"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 20,
           "action": "createOne",
           "decision": {
             "outcome": "refused",
@@ -3859,11 +4125,23 @@
           }
         },
         {
-          "index": 21,
-          "action": "updateOne",
+          "index": 20,
+          "action": "dispatchOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotPending"
+          },
+          "tickets": {
+            "1": "Revoked",
+            "2": "Work"
+          }
+        },
+        {
+          "index": 21,
+          "action": "revokeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotRevocable"
           },
           "tickets": {
             "1": "Revoked",
@@ -3884,7 +4162,7 @@
         },
         {
           "index": 23,
-          "action": "updateOne",
+          "action": "updateTwoOnOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotPending"
@@ -3896,7 +4174,7 @@
         },
         {
           "index": 24,
-          "action": "updateOneOnTwo",
+          "action": "dispatchOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotPending"
@@ -3908,10 +4186,10 @@
         },
         {
           "index": 25,
-          "action": "resumeOne",
+          "action": "updateTwoOnOne",
           "decision": {
             "outcome": "refused",
-            "tag": "TicketNotResumable"
+            "tag": "TicketNotPending"
           },
           "tickets": {
             "1": "Revoked",
@@ -3939,16 +4217,16 @@
         },
         {
           "index": 1,
-          "action": "createTwo",
+          "action": "updateTwoFree",
           "decision": {
             "outcome": "refused",
-            "tag": "DependenciesNotFound"
+            "tag": "TicketNotFound"
           },
           "tickets": {}
         },
         {
           "index": 2,
-          "action": "revokeOne",
+          "action": "updateTwoOnOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
@@ -3957,25 +4235,25 @@
         },
         {
           "index": 3,
-          "action": "createTwo",
+          "action": "dispatchOne",
           "decision": {
             "outcome": "refused",
-            "tag": "DependenciesNotFound"
+            "tag": "TicketNotFound"
           },
           "tickets": {}
         },
         {
           "index": 4,
-          "action": "createTwo",
+          "action": "dispatchTwo",
           "decision": {
             "outcome": "refused",
-            "tag": "DependenciesNotFound"
+            "tag": "TicketNotFound"
           },
           "tickets": {}
         },
         {
           "index": 5,
-          "action": "updateTwoOnOne",
+          "action": "dispatchTwo",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
@@ -3984,73 +4262,87 @@
         },
         {
           "index": 6,
-          "action": "resumeOne",
+          "action": "createOne",
           "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
+            "outcome": "decided",
+            "tag": "TicketCreated"
           },
-          "tickets": {}
+          "tickets": {
+            "1": "Pending"
+          }
         },
         {
           "index": 7,
           "action": "resumeOne",
           "decision": {
             "outcome": "refused",
-            "tag": "TicketNotFound"
+            "tag": "TicketNotResumable"
           },
-          "tickets": {}
+          "tickets": {
+            "1": "Pending"
+          }
         },
         {
           "index": 8,
-          "action": "updateOne",
+          "action": "updateTwoFree",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
           },
-          "tickets": {}
+          "tickets": {
+            "1": "Pending"
+          }
         },
         {
           "index": 9,
-          "action": "updateOneOnTwo",
+          "action": "createOne",
           "decision": {
             "outcome": "refused",
-            "tag": "TicketNotFound"
+            "tag": "TicketAlreadyExists"
           },
-          "tickets": {}
+          "tickets": {
+            "1": "Pending"
+          }
         },
         {
           "index": 10,
-          "action": "resumeOne",
+          "action": "updateOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketUpdated"
+          },
+          "tickets": {
+            "1": "Pending"
+          }
+        },
+        {
+          "index": 11,
+          "action": "createOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketAlreadyExists"
+          },
+          "tickets": {
+            "1": "Pending"
+          }
+        },
+        {
+          "index": 12,
+          "action": "updateTwoFree",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
           },
-          "tickets": {}
+          "tickets": {
+            "1": "Pending"
+          }
         },
         {
-          "index": 11,
+          "index": 13,
           "action": "updateTwoOnOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
-          },
-          "tickets": {}
-        },
-        {
-          "index": 12,
-          "action": "revokeOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {}
-        },
-        {
-          "index": 13,
-          "action": "createOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketCreated"
           },
           "tickets": {
             "1": "Pending"
@@ -4069,7 +4361,7 @@
         },
         {
           "index": 15,
-          "action": "updateTwoFree",
+          "action": "dispatchTwo",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
@@ -4080,6 +4372,17 @@
         },
         {
           "index": 16,
+          "action": "dispatchTwo",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 17,
           "action": "updateOneOnTwo",
           "decision": {
             "outcome": "refused",
@@ -4090,22 +4393,11 @@
           }
         },
         {
-          "index": 17,
-          "action": "updateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotPending"
-          },
-          "tickets": {
-            "1": "Revoked"
-          }
-        },
-        {
           "index": 18,
-          "action": "updateOne",
+          "action": "dispatchTwo",
           "decision": {
             "outcome": "refused",
-            "tag": "TicketNotPending"
+            "tag": "TicketNotFound"
           },
           "tickets": {
             "1": "Revoked"
@@ -4113,6 +4405,61 @@
         },
         {
           "index": 19,
+          "action": "dispatchTwo",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 20,
+          "action": "revokeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotRevocable"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 21,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotResumable"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 22,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotResumable"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 23,
+          "action": "updateTwoOnOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 24,
           "action": "updateOne",
           "decision": {
             "outcome": "refused",
@@ -4123,66 +4470,11 @@
           }
         },
         {
-          "index": 20,
-          "action": "dispatchTwo",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {
-            "1": "Revoked"
-          }
-        },
-        {
-          "index": 21,
-          "action": "dispatchTwo",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {
-            "1": "Revoked"
-          }
-        },
-        {
-          "index": 22,
-          "action": "updateTwoFree",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {
-            "1": "Revoked"
-          }
-        },
-        {
-          "index": 23,
+          "index": 25,
           "action": "createOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketAlreadyExists"
-          },
-          "tickets": {
-            "1": "Revoked"
-          }
-        },
-        {
-          "index": 24,
-          "action": "updateTwoFree",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {
-            "1": "Revoked"
-          }
-        },
-        {
-          "index": 25,
-          "action": "dispatchOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotPending"
           },
           "tickets": {
             "1": "Revoked"
@@ -4209,7 +4501,7 @@
         },
         {
           "index": 1,
-          "action": "updateOne",
+          "action": "dispatchOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
@@ -4218,7 +4510,7 @@
         },
         {
           "index": 2,
-          "action": "dispatchTwo",
+          "action": "dispatchOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
@@ -4227,7 +4519,7 @@
         },
         {
           "index": 3,
-          "action": "resumeOne",
+          "action": "updateTwoOnOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotFound"
@@ -4236,6 +4528,33 @@
         },
         {
           "index": 4,
+          "action": "updateOneOnTwo",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {}
+        },
+        {
+          "index": 5,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {}
+        },
+        {
+          "index": 6,
+          "action": "updateOneOnTwo",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {}
+        },
+        {
+          "index": 7,
           "action": "createOne",
           "decision": {
             "outcome": "decided",
@@ -4246,7 +4565,29 @@
           }
         },
         {
-          "index": 5,
+          "index": 8,
+          "action": "updateOneOnTwo",
+          "decision": {
+            "outcome": "refused",
+            "tag": "DependenciesNotFound"
+          },
+          "tickets": {
+            "1": "Pending"
+          }
+        },
+        {
+          "index": 9,
+          "action": "createOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketAlreadyExists"
+          },
+          "tickets": {
+            "1": "Pending"
+          }
+        },
+        {
+          "index": 10,
           "action": "resumeOne",
           "decision": {
             "outcome": "refused",
@@ -4257,195 +4598,126 @@
           }
         },
         {
-          "index": 6,
+          "index": 11,
+          "action": "dispatchOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketDispatched"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 12,
+          "action": "dispatchOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotPending"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 13,
+          "action": "updateTwoFree",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 14,
+          "action": "dispatchOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotPending"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 15,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotResumable"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 16,
+          "action": "unavailableWorkOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketWorkExecutionUnavailable"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 17,
+          "action": "dispatchOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotPending"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 18,
+          "action": "dispatchTwo",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 19,
+          "action": "updateTwoFree",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 20,
           "action": "createTwo",
           "decision": {
             "outcome": "decided",
             "tag": "TicketCreated"
           },
           "tickets": {
-            "1": "Pending",
+            "1": "Escalated",
             "2": "Pending"
-          }
-        },
-        {
-          "index": 7,
-          "action": "updateOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketUpdated"
-          },
-          "tickets": {
-            "1": "Pending",
-            "2": "Pending"
-          }
-        },
-        {
-          "index": 8,
-          "action": "updateTwoFree",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketUpdated"
-          },
-          "tickets": {
-            "1": "Pending",
-            "2": "Pending"
-          }
-        },
-        {
-          "index": 9,
-          "action": "dispatchTwo",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketDispatched"
-          },
-          "tickets": {
-            "1": "Pending",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 10,
-          "action": "revokeOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketRevoked"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 11,
-          "action": "updateTwoFree",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotPending"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 12,
-          "action": "createTwo",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketAlreadyExists"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 13,
-          "action": "revokeOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotRevocable"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 14,
-          "action": "updateTwoOnOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotPending"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 15,
-          "action": "dispatchTwo",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotPending"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 16,
-          "action": "updateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotPending"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 17,
-          "action": "updateOneOnTwo",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotPending"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 18,
-          "action": "createOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketAlreadyExists"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 19,
-          "action": "updateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotPending"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 20,
-          "action": "updateTwoFree",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotPending"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
           }
         },
         {
           "index": 21,
-          "action": "updateOne",
+          "action": "updateTwoOnOne",
           "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotPending"
+            "outcome": "decided",
+            "tag": "TicketUpdated"
           },
           "tickets": {
-            "1": "Revoked",
-            "2": "Work"
+            "1": "Escalated",
+            "2": "Pending"
           }
         },
         {
@@ -4456,44 +4728,44 @@
             "tag": "TicketNotPending"
           },
           "tickets": {
-            "1": "Revoked",
-            "2": "Work"
+            "1": "Escalated",
+            "2": "Pending"
           }
         },
         {
           "index": 23,
-          "action": "resumeOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotResumable"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 24,
-          "action": "revokeOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotRevocable"
-          },
-          "tickets": {
-            "1": "Revoked",
-            "2": "Work"
-          }
-        },
-        {
-          "index": 25,
-          "action": "updateOne",
+          "action": "dispatchOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotPending"
           },
           "tickets": {
-            "1": "Revoked",
-            "2": "Work"
+            "1": "Escalated",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 24,
+          "action": "dispatchOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotPending"
+          },
+          "tickets": {
+            "1": "Escalated",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 25,
+          "action": "createTwo",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketAlreadyExists"
+          },
+          "tickets": {
+            "1": "Escalated",
+            "2": "Pending"
           }
         }
       ]

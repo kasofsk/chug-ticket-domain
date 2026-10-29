@@ -378,8 +378,21 @@ export class FinalizationResultUnavailable {
   }
 }
 
+export class FinalizationRestart {
+  readonly kind = "FinalizationRestart";
+  constructor(
+    readonly evidence: ContentRef,
+    readonly source: ContentRef,
+  ) {
+    Object.freeze(this);
+  }
+}
+
 export type FinalizationResult =
-  FinalizationSucceeded | FinalizationNeedsWork | FinalizationResultUnavailable;
+  | FinalizationSucceeded
+  | FinalizationNeedsWork
+  | FinalizationRestart
+  | FinalizationResultUnavailable;
 
 export class FinalizationResultReport {
   readonly kind = "FinalizationResultReport";
@@ -764,6 +777,19 @@ export class TicketFinalizationNeedsWork {
   }
 }
 
+export class TicketFinalizationRestarted {
+  readonly kind = "TicketFinalizationRestarted";
+  constructor(
+    readonly ticket: TicketId,
+    readonly work_cycle: CycleNumber,
+    readonly generation: Generation,
+    readonly evidence: ContentRef,
+    readonly source: ContentRef,
+  ) {
+    Object.freeze(this);
+  }
+}
+
 export class TicketFinalizationUnavailable {
   readonly kind = "TicketFinalizationUnavailable";
   constructor(
@@ -794,6 +820,7 @@ export type TicketEvent =
   | TicketEvaluationBlocked
   | TicketFinalizationSucceeded
   | TicketFinalizationNeedsWork
+  | TicketFinalizationRestarted
   | TicketFinalizationUnavailable;
 
 export class ExecuteTask {
@@ -920,6 +947,8 @@ export function validate_command(c: TicketCommand): void {
     pos(c.report.work_cycle, "reported work cycle must be present");
     pos(c.report.generation, "reported generation must be present");
     pos(c.report.result.evidence, "finalization evidence must be present");
+    if (c.report.result instanceof FinalizationRestart)
+      pos(c.report.result.source, "restart source must be present");
   }
 }
 export function work_task_identity(
@@ -1189,6 +1218,24 @@ export function decide(
           ),
         ],
       );
+    if (r.result instanceof FinalizationRestart)
+      return decided(
+        new TicketFinalizationRestarted(
+          id,
+          r.work_cycle,
+          r.generation,
+          evidence,
+          r.result.source,
+        ),
+        [
+          execute_work(
+            t,
+            next_cycle_number(t),
+            r.result.source,
+            finalization_rework_input(t.definition, evidence),
+          ),
+        ],
+      );
     return decided(
       new TicketFinalizationUnavailable(
         id,
@@ -1434,6 +1481,7 @@ function _evolve(g: TicketGraph, f: TicketEvent): TicketGraph | null {
   if (
     f instanceof TicketFinalizationSucceeded ||
     f instanceof TicketFinalizationNeedsWork ||
+    f instanceof TicketFinalizationRestarted ||
     f instanceof TicketFinalizationUnavailable
   ) {
     if (
@@ -1448,6 +1496,13 @@ function _evolve(g: TicketGraph, f: TicketEvent): TicketGraph | null {
         t,
         finalization_rework_input(t.definition, f.evidence),
         s.operation.source,
+      );
+    if (f instanceof TicketFinalizationRestarted)
+      return _enter_work_cycle(
+        g,
+        t,
+        finalization_rework_input(t.definition, f.evidence),
+        f.source,
       );
     return put(
       new Escalated(

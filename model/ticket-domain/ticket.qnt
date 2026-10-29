@@ -87,9 +87,15 @@ module ticket_domain {
     | EvaluationResultReport({ ticket: int, result: ValidatedTaskResult, verdict: EvaluationVerdict })
     | TerminalFailureReport({ ticket: int, failure: TaskFailure, kind: FailureKind })
 
+  type FinalizationRestartResult = {
+    evidence: int,
+    source: int
+  }
+
   type FinalizationResult =
     FinalizationSucceeded(int)
     | FinalizationNeedsWork(int)
+    | FinalizationRestart(FinalizationRestartResult)
     | FinalizationResultUnavailable(int)
 
   type FinalizationResultReport = {
@@ -180,6 +186,14 @@ module ticket_domain {
     evidence: int
   }
 
+  type FinalizationRestartFact = {
+    ticket: int,
+    workCycle: int,
+    generation: int,
+    evidence: int,
+    source: int
+  }
+
   type TicketUpdate = {
     ticket: int,
     revision: int,
@@ -204,6 +218,7 @@ module ticket_domain {
     | TicketEvaluationBlocked(TaskTerminalFact)
     | TicketFinalizationSucceeded(FinalizationFact)
     | TicketFinalizationNeedsWork(FinalizationFact)
+    | TicketFinalizationRestarted(FinalizationRestartFact)
     | TicketFinalizationUnavailable(FinalizationFact)
 
   type TicketTaskObligation = {
@@ -275,6 +290,8 @@ module ticket_domain {
     match result {
       | FinalizationSucceeded(evidence) => evidence > 0
       | FinalizationNeedsWork(evidence) => evidence > 0
+      | FinalizationRestart(restart) =>
+          restart.evidence > 0 and restart.source > 0
       | FinalizationResultUnavailable(evidence) => evidence > 0
     }
 
@@ -849,6 +866,21 @@ module ticket_domain {
                     finalizationReworkInput(ticket.definition, evidence),
                   )],
                 )
+              | FinalizationRestart(restart) => decided(
+                  TicketFinalizationRestarted({
+                    ticket: report.ticket,
+                    workCycle: report.workCycle,
+                    generation: report.generation,
+                    evidence: restart.evidence,
+                    source: restart.source,
+                  }),
+                  [executeWork(
+                    ticket,
+                    nextCycleNumber(ticket),
+                    restart.source,
+                    finalizationReworkInput(ticket.definition, restart.evidence),
+                  )],
+                )
               | FinalizationResultUnavailable(evidence) => decided(
                   TicketFinalizationUnavailable({
                     ticket: report.ticket,
@@ -1163,6 +1195,24 @@ module ticket_domain {
                 ticket,
                 finalizationReworkInput(ticket.definition, rework.evidence),
                 finalization.source,
+              )
+          | _ => graph
+        }
+      }
+    | TicketFinalizationRestarted(restart) => {
+        val ticket = graph.tickets.get(restart.ticket)
+        match ticket.state {
+          | Finalization(finalization) =>
+              if (not(finalizationCurrent(
+                finalization,
+                restart.workCycle,
+                restart.generation,
+              ))) graph
+              else enterWorkCycle(
+                graph,
+                ticket,
+                finalizationReworkInput(ticket.definition, restart.evidence),
+                restart.source,
               )
           | _ => graph
         }
