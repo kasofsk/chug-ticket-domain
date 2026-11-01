@@ -42,13 +42,19 @@ data that is valid in that phase.
   destination. It has its own authority and generation counter because it
   mutates something outside the domain. It ends as `Succeeded`, `NeedsWork`
   (which starts another work cycle) or `Unavailable` (which escalates).
+- **Invalidating an evaluation.** `InvalidateEvaluation` abandons a running
+  evaluation without a verdict: its tasks are cancelled and the ticket returns
+  to Work from the accepted source, as `StackInvalidated`. It is not counted as
+  an evaluation failure. A failure policy may also answer
+  `InvalidateEvaluationFailure` for a failed verdict, which records the verdict
+  and returns to Work the same way.
 - **Escalated.** The ticket is waiting for an operator. Resuming it starts a new
   work cycle, re-runs the blocked evaluators at a new generation, or retries
   finalization at a new generation.
 - **Done** and **Revoked** are terminal. Revoking a ticket cancels any
   outstanding tasks.
 
-Task reports are accepted only for the *current* obligation. Once the state has
+Task reports are accepted only for the _current_ obligation. Once the state has
 moved on, late, stale or mismatched reports are refused.
 
 ## The core API
@@ -62,7 +68,7 @@ apply_command(graph, command, policy): TicketGraph
 ```
 
 - **Commands** are what callers ask for: `CreateTicket`, `UpdateTicket`,
-  `DispatchTicket`, `RevokeTicket`, `ResumeTicket`, `ReportTaskTerminal` and
+  `DispatchTicket`, `RevokeTicket`, `ResumeTicket`, `InvalidateEvaluation`, `ReportTaskTerminal` and
   `ReportFinalizationResult`.
 - **Refusals** are ordinary domain outcomes, such as `DependenciesIncomplete`,
   `TaskNotCurrent` or `TicketRevisionStale`. They are not exceptions.
@@ -78,11 +84,11 @@ model's invariants.
 The source is three modules, and dependencies only point one way
 (`ticket` → `evaluation`, `task`):
 
-| Module | Contents |
-| --- | --- |
-| `task.ts` | The shared task contract: branded identities, task definitions and obligations, neutral task terminals, and structural `equal`/`repr` |
-| `evaluation.ts` | The evaluation protocol: stages, evaluator tasks, and reduction to a single conclusion |
-| `ticket.ts` | The lifecycle: commands, events, refusals, obligations, `decide`/`evolve` |
+| Module          | Contents                                                                                                                              |
+| --------------- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| `task.ts`       | The shared task contract: branded identities, task definitions and obligations, neutral task terminals, and structural `equal`/`repr` |
+| `evaluation.ts` | The evaluation protocol: stages, evaluator tasks, and reduction to a single conclusion                                                |
+| `ticket.ts`     | The lifecycle: commands, events, refusals, obligations, `decide`/`evolve`                                                             |
 
 ## What the domain does and doesn't own
 
@@ -101,13 +107,13 @@ persistence, projections and execution.
 
 `model/` is the specification, and `src/` is a transcription of it.
 
-| Path | Contents |
-| --- | --- |
-| `model/ticket-domain/ticket.qnt` | The lifecycle model |
-| `model/ticket-domain/evaluation/` | The evaluation protocol model |
-| `model/task-contract/task.qnt` | The shared task contract model |
-| `model/ticket-domain/ticket_tests.qnt` | Scenarios and invariants |
-| `model/ticket-domain/traces/` | Golden ITF traces exported from the model |
+| Path                                        | Contents                                                         |
+| ------------------------------------------- | ---------------------------------------------------------------- |
+| `model/ticket-domain/ticket.qnt`            | The lifecycle model                                              |
+| `model/ticket-domain/evaluation/`           | The evaluation protocol model                                    |
+| `model/task-contract/task.qnt`              | The shared task contract model                                   |
+| `model/ticket-domain/ticket_tests.qnt`      | Scenarios and invariants                                         |
+| `model/ticket-domain/traces/`               | Golden ITF traces exported from the model                        |
 | `model/ticket-domain/IMPLEMENTATION_MAP.md` | Mapping from each model definition to its TypeScript counterpart |
 
 `test/conformance/` replays every trace against `src/`. **When the model and
@@ -134,7 +140,11 @@ npm i github:kasofsk/chug-ticket-domain#v0.6.0
 import { ticket, task, evaluation } from "@kasofsk/chug-ticket-domain";
 import * as t from "@kasofsk/chug-ticket-domain/ticket";
 
-const decision = t.decide(graph, new t.DispatchTicket(id, source), t.rework_policy);
+const decision = t.decide(
+  graph,
+  new t.DispatchTicket(id, source),
+  t.rework_policy,
+);
 ```
 
 The package also exports these entry points:

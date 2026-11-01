@@ -13,6 +13,9 @@ The executable specification is `task-contract/task.qnt`, `ticket-domain/evaluat
 | `decide`, `evolve`, `applyDecision`, `graphInvariant` | `decide`, `evolve`, `apply_decision`, `graph_invariant` |
 | `decideDependencies`, `dependencyClosure` | `decide_dependencies`, `_dependency_closure` in `src/ticket.ts`; the success decision is passed in rather than returned as an option |
 | `finalizationCurrent` | `_finalization_current` in `src/ticket.ts`; guards both the finalization refusal and the three finalization `evolve` branches |
+| `InvalidateEvaluation`, `EvaluationNotCurrent`, `TicketEvaluationInvalidated`, `StackInvalidated`, `invalidatedWorkInput` | Same names in `src/ticket.ts` (`invalidated_work_input`); cancels the live evaluation tasks and starts a work cycle from the accepted source, and never consults the failure policy |
+| `InvalidateEvaluationFailure(evidence)`, `TicketEvaluationFailureInvalidated` | Same names in `src/ticket.ts`; a failed verdict the policy answers this way is recorded and enters a `StackInvalidated` work cycle instead of a rework or an escalation |
+| `terminalClassEvent`, `orphansCancelled` | `_TERMINAL_EVENTS`, `_orphans_cancelled` in `src/ticket.ts`; a decision that is not a terminal report drops no live task without cancelling it |
 | `reportAdmissible` | inlined as `task_current(...)` in the evaluation branches of `_evolve` in `src/ticket.ts` |
 
 A released ticket pins its content reference and nothing else about its material: task inputs are `workConfiguration.inputs` and each evaluator's `task.inputs`, so `WorkInput.released` is that one content reference rather than a record.

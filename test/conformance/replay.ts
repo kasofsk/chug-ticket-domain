@@ -69,6 +69,20 @@ function simulation(action: string, prior: k.TicketGraph): k.TicketCommand {
       return b.evaluator_result_command(prior, 1, 503, new e.EvaluatorFail());
     case "unavailableEvaluatorOne":
       return b.failure_command(prior, 1, 504, false, true);
+    case "invalidateOne": {
+      const s1 = prior.tickets.get(t.TicketId(1))?.state;
+      return s1 instanceof k.Evaluation
+        ? new k.InvalidateEvaluation(
+            t.TicketId(1),
+            s1.evaluation.work_cycle,
+            t.ContentRef(510),
+          )
+        : (() => {
+            throw new ConversionError("invalidateOne needs an evaluation");
+          })();
+    }
+    case "invalidateFailedEvaluatorOne":
+      return b.evaluator_result_command(prior, 1, 511, new e.EvaluatorFail());
     case "completeFinalizationOne":
       return b.finalization_command(
         prior,
@@ -133,6 +147,15 @@ function event_command(e: k.TicketEvent): Reconstructed {
       policy = () => new k.EscalateEvaluationFailure();
       command = new k.ReportTaskTerminal(e.report);
       break;
+    case "TicketEvaluationFailureInvalidated": {
+      const evidence = e.evidence;
+      policy = () => new k.InvalidateEvaluationFailure(evidence);
+      command = new k.ReportTaskTerminal(e.report);
+      break;
+    }
+    case "TicketEvaluationInvalidated":
+      command = new k.InvalidateEvaluation(e.ticket, e.work_cycle, e.evidence);
+      break;
     case "TicketEvaluationProgressed":
     case "TicketEvaluationPassed":
     case "TicketEvaluationBlocked":
@@ -167,7 +190,9 @@ export function command_from_step(
       throw new ConversionError("model step makes no nondeterministic pick");
     return new Reconstructed(
       simulation(step.action, prior),
-      k.rework_policy,
+      step.action === "invalidateFailedEvaluatorOne"
+        ? () => new k.InvalidateEvaluationFailure(t.ContentRef(1601))
+        : k.rework_policy,
       "action",
     );
   }

@@ -82,6 +82,10 @@ module ticket_tests {
     evaluation: EvaluationInstance,
   ): EvaluationFailureDisposition = EscalateEvaluationFailure
 
+  pure def invalidatePolicy(
+    evaluation: EvaluationInstance,
+  ): EvaluationFailureDisposition = InvalidateEvaluationFailure(1601)
+
   action init = all {
     graph' = { tickets: Map() },
     priorGraph' = { tickets: Map() },
@@ -208,6 +212,21 @@ module ticket_tests {
   action reportEvaluatorProcessFailed(ticketId, evidence) =
     reportEvaluatorFailure(ticketId, evidence, ProcessFailure)
 
+  action invalidateEvaluation(ticketId, evidence) = {
+    if (not(graph.tickets.keys().contains(ticketId))) blocked
+    else {
+      val ticket = graph.tickets.get(ticketId)
+      match ticket.state {
+        | Evaluation(evaluation) => submit(InvalidateEvaluation({
+            ticket: ticketId,
+            workCycle: evaluation.workCycle,
+            evidence: evidence,
+          }))
+        | _ => blocked
+      }
+    }
+  }
+
   action reportFinalization(
     ticketId,
     result,
@@ -310,6 +329,26 @@ module ticket_tests {
         | _ => false
       }
     | _ => false
+  }
+
+  def workInvalidatedWith(ticketId: int, evidence: int): bool =
+    match graph.tickets.get(ticketId).state {
+      | Work(work) => work.input.cause == StackInvalidated(evidence)
+      | _ => false
+    }
+
+  def decidedCancels: List[TaskIdentity] = match lastDecision {
+    | TicketDecided(success) => success.obligations.foldl([], (found, obligation) =>
+        match obligation {
+          | CancelTask(cancellation) => found.append(cancellation.task)
+          | _ => found
+        })
+    | TicketRefused(_) => []
+  }
+
+  def decidedEvent: TicketEvent = match lastDecision {
+    | TicketDecided(success) => success.event
+    | TicketRefused(_) => TicketRevoked(0)
   }
 
   def workReworkRefs(ticketId: int): List[EvaluationReworkEntry] =
@@ -938,6 +977,210 @@ module ticket_tests {
 
   def decisionInvariant = decisionValid(priorGraph, lastDecision)
 
+  run invalidationMidStageCancelsAndRestartsInWorkTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(reportWorkResult(1, 1401))
+      .then(reportEvaluatorResult(1, 1411, EvaluatorPass))
+      .then(invalidateEvaluation(1, 1421))
+      .then(check(decidedEvent == TicketEvaluationInvalidated({
+        ticket: 1,
+        workCycle: 1,
+        evidence: 1421,
+      })))
+      .then(check(decidedCancels == [evaluatorTaskIdentity(1, 1, 10, 1, 12)]))
+      .then(check(decidedWorkContexts == [2]))
+      .then(check(ticketWorkCycle(1, 2)))
+      .then(check(workInvalidatedWith(1, 1421)))
+      .then(check(workUsesSource(1, 1401)))
+      .then(check(workReworkRefs(1) == []))
+      .then(check(decisionInvariant))
+  }
+
+  run invalidationBeforeAnyEvaluatorReportsCancelsEveryEvaluatorTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(reportWorkResult(1, 1451))
+      .then(invalidateEvaluation(1, 1461))
+      .then(check(decidedCancels == [
+        evaluatorTaskIdentity(1, 1, 10, 1, 11),
+        evaluatorTaskIdentity(1, 1, 10, 1, 12),
+      ]))
+      .then(check(decisionInvariant))
+  }
+
+  run staleVerdictAfterInvalidationIsRefusedTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(reportWorkResult(1, 1501))
+      .then(reportEvaluatorResult(1, 1511, EvaluatorPass))
+      .then(invalidateEvaluation(1, 1521))
+      .then(submit(ReportTaskTerminal(EvaluationResultReport({
+        ticket: 1,
+        result: validatedTaskResult({
+          task: evaluatorTaskIdentity(1, 1, 10, 1, 12),
+          definition: EVALUATOR,
+          contextRef: 1501,
+        }, 1531),
+        verdict: EvaluatorFail,
+      }))))
+      .then(check(lastDecision == TicketRefused(TaskNotCurrent({
+        ticket: 1,
+        task: evaluatorTaskIdentity(1, 1, 10, 1, 12),
+      }))))
+  }
+
+  run invalidationIsRefusedOutsideACurrentEvaluationTest = {
+    init
+      .then(submit(InvalidateEvaluation({ ticket: 9, workCycle: 1, evidence: 1 })))
+      .then(check(lastDecision == TicketRefused(TicketNotFound(9))))
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(InvalidateEvaluation({ ticket: 1, workCycle: 1, evidence: 1 })))
+      .then(check(lastDecision == TicketRefused(EvaluationNotCurrent({ ticket: 1, workCycle: 1 }))))
+      .then(submit(dispatch(1)))
+      .then(submit(InvalidateEvaluation({ ticket: 1, workCycle: 1, evidence: 1 })))
+      .then(check(lastDecision == TicketRefused(EvaluationNotCurrent({ ticket: 1, workCycle: 1 }))))
+      .then(reportWorkResult(1, 1601))
+      .then(submit(InvalidateEvaluation({ ticket: 1, workCycle: 2, evidence: 1 })))
+      .then(check(lastDecision == TicketRefused(EvaluationNotCurrent({ ticket: 1, workCycle: 2 }))))
+      .then(submit(InvalidateEvaluation({ ticket: 1, workCycle: 1, evidence: 1611 })))
+      .then(submit(InvalidateEvaluation({ ticket: 1, workCycle: 1, evidence: 1611 })))
+      .then(check(lastDecision == TicketRefused(EvaluationNotCurrent({ ticket: 1, workCycle: 1 }))))
+      .then(reportWorkResult(1, 1602))
+      .then(reportEvaluatorResult(1, 1621, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 1622, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 1623, EvaluatorPass))
+      .then(check(ticketFinalizing(1)))
+      .then(submit(InvalidateEvaluation({ ticket: 1, workCycle: 2, evidence: 1 })))
+      .then(check(lastDecision == TicketRefused(EvaluationNotCurrent({ ticket: 1, workCycle: 2 }))))
+      .then(reportFinalization(1, FinalizationSucceeded(1631)))
+      .then(submit(InvalidateEvaluation({ ticket: 1, workCycle: 2, evidence: 1 })))
+      .then(check(lastDecision == TicketRefused(EvaluationNotCurrent({ ticket: 1, workCycle: 2 }))))
+  }
+
+  run invalidationIgnoresTheFailurePolicyTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(reportWorkResult(1, 1701))
+      .then(check(decide(
+        graph,
+        InvalidateEvaluation({ ticket: 1, workCycle: 1, evidence: 1711 }),
+        escalatePolicy,
+      ) == decide(
+        graph,
+        InvalidateEvaluation({ ticket: 1, workCycle: 1, evidence: 1711 }),
+        reworkPolicy,
+      )))
+  }
+
+  run invalidationRunsEvaluationAgainOnFreshTaskIdentitiesTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(reportWorkResult(1, 1801))
+      .then(invalidateEvaluation(1, 1811))
+      .then(reportWorkResult(1, 1802))
+      .then(check(ticketEvaluationGeneration(1, 1)))
+      .then(check(match graph.tickets.get(1).state {
+        | Evaluation(evaluation) =>
+            evaluation.workCycle == 2
+            and taskCurrent(evaluation, evaluatorTaskIdentity(1, 2, 10, 1, 11))
+            and not(taskCurrent(
+              evaluation,
+              evaluatorTaskIdentity(1, 1, 10, 1, 11),
+            ))
+        | _ => false
+      }))
+      .then(reportEvaluatorResult(1, 1821, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 1822, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 1823, EvaluatorPass))
+      .then(check(ticketFinalizing(1)))
+      .then(reportFinalization(1, FinalizationSucceeded(1831)))
+      .then(check(graph.tickets.get(1).state == Done))
+  }
+
+  run failedVerdictInvalidatedByPolicyKeepsTheVerdictAndSkipsReworkTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(reportWorkResult(1, 1901))
+      .then(reportEvaluatorResult(1, 1911, EvaluatorFail))
+      .then(reportEvaluatorResultWithFailureDisposition(
+        1,
+        1912,
+        EvaluatorPass,
+        invalidatePolicy,
+      ))
+      .then(check(match decidedEvent {
+        | TicketEvaluationFailureInvalidated(fact) =>
+            fact.ticket == 1 and fact.evidence == 1601
+        | _ => false
+      }))
+      .then(check(decidedCancels == []))
+      .then(check(decidedWorkContexts == [2]))
+      .then(check(ticketWorkCycle(1, 2)))
+      .then(check(workInvalidatedWith(1, 1601)))
+      .then(check(workReworkRefs(1) == []))
+      .then(check(not(isEscalated(graph.tickets.get(1).state))))
+      .then(check(decisionInvariant))
+  }
+
+  run dropOfALiveTaskWithoutCancellationIsNotAValidDecisionTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(reportWorkResult(1, 2001))
+      .then(check({
+        val evolved = evolve(graph, TicketEvaluationInvalidated({
+          ticket: 1,
+          workCycle: 1,
+          evidence: 2011,
+        }))
+        val ticket = graph.tickets.get(1)
+        val restart = executeWork(
+          ticket,
+          nextCycleNumber(ticket),
+          2001,
+          invalidatedWorkInput(ticket.definition, 2011),
+        )
+        and {
+          not(decisionValid(graph, TicketDecided({
+            event: TicketEvaluationInvalidated({
+              ticket: 1,
+              workCycle: 1,
+              evidence: 2011,
+            }),
+            obligations: [restart],
+          }))),
+          decisionValid(graph, decide(
+            graph,
+            InvalidateEvaluation({ ticket: 1, workCycle: 1, evidence: 2011 }),
+            reworkPolicy,
+          )),
+          evolved != graph,
+        }
+      }))
+  }
+
+  run invalidationEvidenceMustBePositiveTest = {
+    init.then(check(
+      not(commandValid(InvalidateEvaluation({
+        ticket: 1,
+        workCycle: 1,
+        evidence: 0,
+      })))
+      and commandValid(InvalidateEvaluation({
+        ticket: 1,
+        workCycle: 1,
+        evidence: 1,
+      }))
+    ))
+  }
+
   def modelInvariant = graphInvariant(graph) and decisionInvariant
 
   def someDone = graph.tickets.keys().exists(ticket =>
@@ -984,6 +1227,13 @@ module ticket_tests {
   action passEvaluatorOne = reportEvaluatorResult(1, 502, EvaluatorPass)
   action failEvaluatorOne = reportEvaluatorResult(1, 503, EvaluatorFail)
   action unavailableEvaluatorOne = reportEvaluatorUnavailable(1, 504)
+  action invalidateOne = invalidateEvaluation(1, 510)
+  action invalidateFailedEvaluatorOne = reportEvaluatorResultWithFailureDisposition(
+    1,
+    511,
+    EvaluatorFail,
+    invalidatePolicy,
+  )
   action completeFinalizationOne =
     reportFinalization(1, FinalizationSucceeded(505))
   action reworkFinalizationOne =
@@ -1008,6 +1258,8 @@ module ticket_tests {
     passEvaluatorOne,
     failEvaluatorOne,
     unavailableEvaluatorOne,
+    invalidateOne,
+    invalidateFailedEvaluatorOne,
     completeFinalizationOne,
     reworkFinalizationOne,
     unavailableFinalizationOne,

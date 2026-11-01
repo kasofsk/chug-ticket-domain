@@ -8,6 +8,7 @@ module ticket_domain {
     InitialWork
     | EvaluationRework(List[EvaluationReworkEntry])
     | FinalizationRework(int)
+    | StackInvalidated(int)
 
   type WorkInput = {
     released: ReleasedContent,
@@ -27,6 +28,7 @@ module ticket_domain {
   type EvaluationFailureDisposition =
     ReworkEvaluationFailure
     | EscalateEvaluationFailure
+    | InvalidateEvaluationFailure(int)
 
   type EvaluationFailurePolicy = EvaluationInstance => EvaluationFailureDisposition
 
@@ -109,8 +111,15 @@ module ticket_domain {
     | DispatchTicket({ ticket: int, source: int })
     | RevokeTicket(int)
     | ResumeTicket(int)
+    | InvalidateEvaluation(InvalidateEvaluationRequest)
     | ReportTaskTerminal(TaskTerminalReport)
     | ReportFinalizationResult(FinalizationResultReport)
+
+  type InvalidateEvaluationRequest = {
+    ticket: int,
+    workCycle: int,
+    evidence: int
+  }
 
   type RefusedDependencies = {
     ticket: int,
@@ -126,6 +135,11 @@ module ticket_domain {
     ticket: int,
     workCycle: int,
     generation: int
+  }
+
+  type CurrentEvaluationRefusal = {
+    ticket: int,
+    workCycle: int
   }
 
   type StaleRevision = {
@@ -149,6 +163,7 @@ module ticket_domain {
     | TicketNotResumable(int)
     | TaskNotCurrent(CurrentTaskRefusal)
     | FinalizationNotCurrent(CurrentFinalizationRefusal)
+    | EvaluationNotCurrent(CurrentEvaluationRefusal)
 
   type TaskTerminalFact = {
     ticket: int,
@@ -159,6 +174,18 @@ module ticket_domain {
     ticket: int,
     report: TaskTerminalReport,
     evidence: List[EvaluationReworkEntry]
+  }
+
+  type EvaluationInvalidatedFact = {
+    ticket: int,
+    workCycle: int,
+    evidence: int
+  }
+
+  type EvaluationFailureInvalidatedFact = {
+    ticket: int,
+    report: TaskTerminalReport,
+    evidence: int
   }
 
   type WorkResultAcceptedEvent = {
@@ -201,6 +228,8 @@ module ticket_domain {
     | TicketEvaluationPassed(TaskTerminalFact)
     | TicketEvaluationReworkStarted(EvaluationReworkFact)
     | TicketEvaluationFailureEscalated(EvaluationReworkFact)
+    | TicketEvaluationInvalidated(EvaluationInvalidatedFact)
+    | TicketEvaluationFailureInvalidated(EvaluationFailureInvalidatedFact)
     | TicketEvaluationBlocked(TaskTerminalFact)
     | TicketFinalizationSucceeded(FinalizationFact)
     | TicketFinalizationNeedsWork(FinalizationFact)
@@ -284,6 +313,9 @@ module ticket_domain {
         and update.expectedRevision > 0
         and releasedTicketValid(update.definition)
     | DispatchTicket(dispatch) => dispatch.ticket > 0 and dispatch.source > 0
+    | InvalidateEvaluation(request) => request.ticket > 0
+        and request.workCycle > 0
+        and request.evidence > 0
     | ReportTaskTerminal(report) => reportValid(report)
     | ReportFinalizationResult(report) => report.ticket > 0
         and report.workCycle > 0
@@ -375,6 +407,15 @@ module ticket_domain {
   ): WorkInput = {
     released: definition.content,
     cause: FinalizationRework(evidence),
+    retryEvidence: [],
+  }
+
+  pure def invalidatedWorkInput(
+    definition: ReleasedTicket,
+    evidence: int,
+  ): WorkInput = {
+    released: definition.content,
+    cause: StackInvalidated(evidence),
     retryEvidence: [],
   }
 
@@ -596,6 +637,41 @@ module ticket_domain {
       )
     }
 
+  pure def decideInvalidateEvaluation(
+    graph: TicketGraph,
+    request: InvalidateEvaluationRequest,
+  ): TicketDecision =
+    if (not(graph.tickets.keys().contains(request.ticket)))
+      refused(TicketNotFound(request.ticket))
+    else {
+      val ticket = graph.tickets.get(request.ticket)
+      match ticket.state {
+        | Evaluation(evaluation) =>
+            if (evaluation.workCycle != request.workCycle)
+              refused(EvaluationNotCurrent({
+                ticket: request.ticket,
+                workCycle: request.workCycle,
+              }))
+            else decided(
+              TicketEvaluationInvalidated({
+                ticket: request.ticket,
+                workCycle: request.workCycle,
+                evidence: request.evidence,
+              }),
+              cancelLiveTasks(ticket).concat([executeWork(
+                ticket,
+                nextCycleNumber(ticket),
+                evaluation.input.acceptedSourceRef,
+                invalidatedWorkInput(ticket.definition, request.evidence),
+              )]),
+            )
+        | _ => refused(EvaluationNotCurrent({
+          ticket: request.ticket,
+          workCycle: request.workCycle,
+        }))
+      }
+    }
+
   pure def decideResume(
     graph: TicketGraph,
     ticketId: int,
@@ -742,6 +818,19 @@ module ticket_domain {
                 }),
                 [],
               )
+            | InvalidateEvaluationFailure(evidence) => decided(
+                TicketEvaluationFailureInvalidated({
+                  ticket: reportTicket(report),
+                  report: report,
+                  evidence: evidence,
+                }),
+                [executeWork(
+                  ticket,
+                  nextCycleNumber(ticket),
+                  updated.input.acceptedSourceRef,
+                  invalidatedWorkInput(ticket.definition, evidence),
+                )],
+              )
           }
         }
       | EvaluationBlocked(_) => {
@@ -877,6 +966,8 @@ module ticket_domain {
     | DispatchTicket(ticket) => decideDispatch(graph, ticket)
     | RevokeTicket(ticket) => decideRevoke(graph, ticket)
     | ResumeTicket(ticket) => decideResume(graph, ticket)
+    | InvalidateEvaluation(request) =>
+        decideInvalidateEvaluation(graph, request)
     | ReportTaskTerminal(report) =>
         decideTaskTerminal(graph, report, failurePolicy)
     | ReportFinalizationResult(report) =>
@@ -1100,6 +1191,37 @@ module ticket_domain {
           | _ => graph
         }
       }
+    | TicketEvaluationInvalidated(invalidated) => {
+        val ticket = graph.tickets.get(invalidated.ticket)
+        match ticket.state {
+          | Evaluation(evaluation) =>
+              if (evaluation.workCycle != invalidated.workCycle) graph
+              else enterWorkCycle(
+                graph,
+                ticket,
+                invalidatedWorkInput(ticket.definition, invalidated.evidence),
+                evaluation.input.acceptedSourceRef,
+              )
+          | _ => graph
+        }
+      }
+    | TicketEvaluationFailureInvalidated(invalidated) => {
+        val ticket = graph.tickets.get(invalidated.ticket)
+        match ticket.state {
+          | Evaluation(evaluation) =>
+              if (not(reportAdmissible(evaluation, invalidated.report))) graph
+              else match applyEvaluationReport(evaluation, invalidated.report).state {
+                | EvaluationFailed(_) => enterWorkCycle(
+                    graph,
+                    ticket,
+                    invalidatedWorkInput(ticket.definition, invalidated.evidence),
+                    evaluation.input.acceptedSourceRef,
+                  )
+                | _ => graph
+              }
+          | _ => graph
+        }
+      }
     | TicketEvaluationFailureEscalated(failure) => {
         val ticket = graph.tickets.get(failure.ticket)
         match ticket.state {
@@ -1217,6 +1339,7 @@ module ticket_domain {
             entries[index].evaluator > 0
             and entries[index].resultRef > 0)
       | FinalizationRework(evidence) => evidence > 0
+      | StackInvalidated(evidence) => evidence > 0
     }
 
   pure def workInputMatchesTicket(
@@ -1370,6 +1493,42 @@ module ticket_domain {
         }
   }
 
+  pure def terminalClassEvent(event: TicketEvent): bool = match event {
+    | TicketWorkResultAccepted(_) => true
+    | TicketWorkProcessFailed(_) => true
+    | TicketWorkExecutionUnavailable(_) => true
+    | TicketEvaluationProgressed(_) => true
+    | TicketEvaluationPassed(_) => true
+    | TicketEvaluationReworkStarted(_) => true
+    | TicketEvaluationFailureEscalated(_) => true
+    | TicketEvaluationFailureInvalidated(_) => true
+    | TicketEvaluationBlocked(_) => true
+    | _ => false
+  }
+
+  pure def obligationsCancel(
+    obligations: List[Obligation],
+    ticket: int,
+    task: TaskIdentity,
+  ): bool = obligations.indices().exists(index =>
+    match obligations[index] {
+      | CancelTask(cancellation) =>
+          cancellation.ticket == ticket and cancellation.task == task
+      | _ => false
+    })
+
+  pure def orphansCancelled(
+    prior: TicketGraph,
+    evolved: TicketGraph,
+    obligations: List[Obligation],
+  ): bool = prior.tickets.keys().forall(ticket => {
+    val before = ticketLiveTasks(prior, ticket)
+    val after = ticketLiveTasks(evolved, ticket)
+    before.indices().forall(index =>
+      listHasTask(after, before[index])
+      or obligationsCancel(obligations, ticket, before[index]))
+  })
+
   pure def decisionValid(
     graph: TicketGraph,
     decision: TicketDecision,
@@ -1381,6 +1540,8 @@ module ticket_domain {
           obligationValid(success.obligations[index])
           and obligationAgrees(graph, evolved, success.obligations[index]))
         and obligationsUnique(success.obligations)
+        and (terminalClassEvent(success.event)
+          or orphansCancelled(graph, evolved, success.obligations))
         and graphInvariant(evolved)
       }
   }

@@ -84,6 +84,7 @@ import {
   InitialWork,
   EvaluationRework,
   FinalizationRework,
+  StackInvalidated,
   WorkCause,
   WorkInput,
   WorkExecution,
@@ -128,6 +129,7 @@ import {
   TicketNotResumable,
   TaskNotCurrent,
   FinalizationNotCurrent,
+  EvaluationNotCurrent,
   TicketRefusal,
   TicketCreated,
   TicketUpdated,
@@ -143,6 +145,8 @@ import {
   TicketEvaluationPassed,
   TicketEvaluationReworkStarted,
   TicketEvaluationFailureEscalated,
+  TicketEvaluationInvalidated,
+  TicketEvaluationFailureInvalidated,
   TicketEvaluationBlocked,
   TicketFinalizationSucceeded,
   TicketFinalizationNeedsWork,
@@ -413,6 +417,11 @@ function parse_FinalizationRework(v: Value): FinalizationRework {
     throw new ConversionError("expected FinalizationRework variant");
   const payload = v.value;
   return new FinalizationRework(parse_ContentRef(payload));
+}
+function parse_StackInvalidated(v: Value): StackInvalidated {
+  if (!(v instanceof Variant) || v.tag !== "StackInvalidated")
+    throw new ConversionError("expected StackInvalidated variant");
+  return new StackInvalidated(parse_ContentRef(v.value));
 }
 function parse_WorkInput(v: Value): WorkInput {
   const r = record(v, ["released", "cause", "retryEvidence"]);
@@ -707,6 +716,15 @@ function parse_FinalizationNotCurrent(v: Value): FinalizationNotCurrent {
     parse_Generation(r["generation"]!),
   );
 }
+function parse_EvaluationNotCurrent(v: Value): EvaluationNotCurrent {
+  if (!(v instanceof Variant) || v.tag !== "EvaluationNotCurrent")
+    throw new ConversionError("expected EvaluationNotCurrent variant");
+  const r = record(v.value, ["ticket", "workCycle"]);
+  return new EvaluationNotCurrent(
+    parse_TicketId(r["ticket"]!),
+    parse_CycleNumber(r["workCycle"]!),
+  );
+}
 function parse_TicketCreated(v: Value): TicketCreated {
   if (!(v instanceof Variant) || v.tag !== "TicketCreated")
     throw new ConversionError("expected TicketCreated variant");
@@ -843,6 +861,32 @@ function parse_TicketEvaluationFailureEscalated(
     parse_TicketId(r["ticket"]!),
     parse_TaskTerminalReport(r["report"]!),
     list(r["evidence"]!).map((item) => parse_EvaluationReworkEntry(item)),
+  );
+}
+function parse_TicketEvaluationInvalidated(
+  v: Value,
+): TicketEvaluationInvalidated {
+  if (!(v instanceof Variant) || v.tag !== "TicketEvaluationInvalidated")
+    throw new ConversionError("expected TicketEvaluationInvalidated variant");
+  const r = record(v.value, ["ticket", "workCycle", "evidence"]);
+  return new TicketEvaluationInvalidated(
+    parse_TicketId(r["ticket"]!),
+    parse_CycleNumber(r["workCycle"]!),
+    parse_ContentRef(r["evidence"]!),
+  );
+}
+function parse_TicketEvaluationFailureInvalidated(
+  v: Value,
+): TicketEvaluationFailureInvalidated {
+  if (!(v instanceof Variant) || v.tag !== "TicketEvaluationFailureInvalidated")
+    throw new ConversionError(
+      "expected TicketEvaluationFailureInvalidated variant",
+    );
+  const r = record(v.value, ["ticket", "report", "evidence"]);
+  return new TicketEvaluationFailureInvalidated(
+    parse_TicketId(r["ticket"]!),
+    parse_TaskTerminalReport(r["report"]!),
+    parse_ContentRef(r["evidence"]!),
   );
 }
 function parse_TicketEvaluationBlocked(v: Value): TicketEvaluationBlocked {
@@ -1063,6 +1107,8 @@ function parse_WorkCause(v: Value): WorkCause {
       return parse_EvaluationRework(v);
     case "FinalizationRework":
       return parse_FinalizationRework(v);
+    case "StackInvalidated":
+      return parse_StackInvalidated(v);
     default:
       throw new ConversionError(`unknown WorkCause tag '${v.tag}'`);
   }
@@ -1136,6 +1182,8 @@ function parse_TicketRefusal(v: Value): TicketRefusal {
       return parse_TaskNotCurrent(v);
     case "FinalizationNotCurrent":
       return parse_FinalizationNotCurrent(v);
+    case "EvaluationNotCurrent":
+      return parse_EvaluationNotCurrent(v);
     default:
       throw new ConversionError(`unknown TicketRefusal tag '${v.tag}'`);
   }
@@ -1171,6 +1219,10 @@ function parse_TicketEvent(v: Value): TicketEvent {
       return parse_TicketEvaluationReworkStarted(v);
     case "TicketEvaluationFailureEscalated":
       return parse_TicketEvaluationFailureEscalated(v);
+    case "TicketEvaluationInvalidated":
+      return parse_TicketEvaluationInvalidated(v);
+    case "TicketEvaluationFailureInvalidated":
+      return parse_TicketEvaluationFailureInvalidated(v);
     case "TicketEvaluationBlocked":
       return parse_TicketEvaluationBlocked(v);
     case "TicketFinalizationSucceeded":
