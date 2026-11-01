@@ -77,17 +77,15 @@ has no `--mbt`, so a scenario's inputs come from its `run` definition.
 
 `ticket.qnt` declares no Quint `action`s — it is pure functions over these
 types — so coverage is measured over the decision outcomes and lifecycle phases
-the command paths produce. Over the 26 traces: `TicketEvent` 18/18,
-`TicketState` 7/7, `TicketRefusal` 10/13. `index.json` holds the live tables.
+the command paths produce. Over the 42 traces: `TicketEvent` 20/20,
+`TicketState` 7/7, `TicketRefusal` 15/15: every declared variant is exercised.
+`index.json` holds the live tables.
 
-Never exercised: `SelfDependency`, `TaskNotCurrent`, `FinalizationNotCurrent`.
-The latter two are asserted inside `check(decide(...) == TicketRefused(...))`,
-which by construction leaves `lastDecision` untouched, so the refusal never
-reaches a trace; `SelfDependency` appears in no scenario at all. **Replaying
-these traces does not test those three refusals** — they need direct `decide`
-tests.
+A refusal reaches a trace only when a scenario takes it through `submit`; one
+asserted inside `check(decide(...) == TicketRefused(...))` leaves `lastDecision`
+untouched and is invisible to replay.
 
-Names drop the `Test` suffix, decisions the `Ticket` prefix; equal runs collapse.
+Names drop the `Test` suffix, decisions the `Ticket` prefix; equal runs collapse. The table below predates the invalidation scenarios and the later additions; `index.json` lists every scenario.
 
 | scenario | states | decisions |
 | --- | --- | --- |
@@ -117,10 +115,10 @@ Seeds chosen by set cover: random walks mostly churn in `Pending`/`Revoked`.
 
 | seed | states | phases reached | distinct step actions |
 | --- | --- | --- | --- |
-| `0x01` | 26 | Pending, Revoked | 6 |
-| `0x02` | 26 | Pending, Revoked | 7 |
-| `0x07` | 26 | Escalated, Pending, Work | 8 |
-| `0x28` | 26 | Evaluation, Pending, Revoked, Work | 9 |
+| `0x01` | 26 | Pending, Work | 8 |
+| `0x02` | 26 | Pending, Revoked | 10 |
+| `0x08` | 26 | Escalated, Evaluation, Pending, Work | 14 |
+| `0x10` | 26 | Escalated, Evaluation, Pending, Work | 13 |
 
 The `executionRequirementsPreserved` scenario records distinct work and
 evaluator execution-requirement references through a pending revision,

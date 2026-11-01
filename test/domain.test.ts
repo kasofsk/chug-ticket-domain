@@ -224,3 +224,134 @@ test("an update refuses a dependency it adds unless that dependency is live and 
   ).toEqual(ids(3));
   expect(k.graph_invariant(driver.graph)).toBe(true);
 });
+
+const T1 = t.TicketId(1);
+const invalidate = (cycle: number, evidence: number) =>
+  new k.InvalidateEvaluation(T1, t.CycleNumber(cycle), t.ContentRef(evidence));
+const state_of = (d: b.Driver) => d.graph.tickets.get(T1)!.state;
+const refused = (cycle: number) =>
+  new k.TicketRefused(new k.EvaluationNotCurrent(T1, t.CycleNumber(cycle)));
+
+function evaluating(): b.Driver {
+  const driver = started();
+  driver.submit(producedWork(driver.graph, 501, 991));
+  return driver;
+}
+
+test("a decision that drops a live task without cancelling it is invalid", () => {
+  const driver = evaluating();
+  const decision = k.decide(driver.graph, invalidate(1, 511), k.rework_policy);
+  if (!(decision instanceof k.TicketDecided)) throw new Error("not decided");
+  expect(decision.obligations.some((o) => o instanceof k.CancelTask)).toBe(
+    true,
+  );
+  expect(k.decision_valid(driver.graph, decision)).toBe(true);
+  const stripped = new k.TicketDecided(
+    decision.event,
+    decision.obligations.filter((o) => !(o instanceof k.CancelTask)),
+  );
+  expect(k.decision_valid(driver.graph, stripped)).toBe(false);
+});
+
+test("invalidating an evaluation restarts work from the accepted source", () => {
+  const driver = evaluating();
+  driver.submit(invalidate(1, 511));
+  const state = state_of(driver);
+  if (!(state instanceof k.Work)) throw new Error("not in work");
+  expect(state.execution.source).toBe(t.ContentRef(991));
+  expect(state.execution.input.cause).toEqual(
+    new k.StackInvalidated(t.ContentRef(511)),
+  );
+  expect(driver.submit(invalidate(1, 512))).toEqual(refused(1));
+  expect(k.graph_invariant(driver.graph)).toBe(true);
+});
+
+test("evolve ignores an invalidation for another cycle or state", () => {
+  const driver = evaluating();
+  const at = (cycle: number) =>
+    new k.TicketEvaluationInvalidated(
+      T1,
+      t.CycleNumber(cycle),
+      t.ContentRef(511),
+    );
+  expect(k.evolve(driver.graph, at(2))).toBe(driver.graph);
+  driver.submit(invalidate(1, 511));
+  expect(k.evolve(driver.graph, at(1))).toBe(driver.graph);
+  driver.submit(producedWork(driver.graph, 502, 992));
+  expect(k.evolve(driver.graph, at(1))).toBe(driver.graph);
+  expect(k.evolve(driver.graph, at(2))).not.toBe(driver.graph);
+});
+
+test("a blocked evaluation escalation can be invalidated, a failure one cannot", () => {
+  const blocked = evaluating();
+  blocked.submit(
+    b.evaluator_result_command(blocked.graph, 1, 511, new e.EvaluatorPass()),
+  );
+  blocked.submit(b.failure_command(blocked.graph, 1, 512, false, true));
+  expect(state_of(blocked)).toBeInstanceOf(k.Escalated);
+  expect(blocked.submit(invalidate(2, 521))).toEqual(refused(2));
+  const decision = blocked.submit(invalidate(1, 521));
+  if (!(decision instanceof k.TicketDecided)) throw new Error("not decided");
+  expect(decision.obligations.some((o) => o instanceof k.CancelTask)).toBe(
+    false,
+  );
+  const state = state_of(blocked);
+  if (!(state instanceof k.Work)) throw new Error("not in work");
+  expect(state.execution.source).toBe(t.ContentRef(991));
+  expect(state.execution.input.cause).toEqual(
+    new k.StackInvalidated(t.ContentRef(521)),
+  );
+  const failed = evaluating();
+  failed.submit(
+    b.evaluator_result_command(failed.graph, 1, 611, new e.EvaluatorFail()),
+  );
+  failed.submit(
+    b.evaluator_result_command(failed.graph, 1, 612, new e.EvaluatorPass()),
+    () => new k.EscalateEvaluationFailure(),
+  );
+  expect(state_of(failed)).toBeInstanceOf(k.Escalated);
+  expect(failed.submit(invalidate(1, 621))).toEqual(refused(1));
+});
+
+test("a policy must supply positive invalidation evidence", () => {
+  const driver = evaluating();
+  driver.submit(
+    b.evaluator_result_command(driver.graph, 1, 511, new e.EvaluatorFail()),
+  );
+  const report = b.evaluator_result_command(
+    driver.graph,
+    1,
+    512,
+    new e.EvaluatorPass(),
+  );
+  const zero = k.decide(
+    driver.graph,
+    report,
+    () => new k.InvalidateEvaluationFailure(t.ContentRef(0)),
+  );
+  expect(k.decision_valid(driver.graph, zero)).toBe(false);
+  const good = k.decide(
+    driver.graph,
+    report,
+    () => new k.InvalidateEvaluationFailure(t.ContentRef(1601)),
+  );
+  expect(k.decision_valid(driver.graph, good)).toBe(true);
+  expect(good).toBeInstanceOf(k.TicketDecided);
+  if (good instanceof k.TicketDecided)
+    expect(good.event).toBeInstanceOf(k.TicketEvaluationFailureInvalidated);
+});
+
+test("work that fails after an invalidation resumes with the same cause", () => {
+  const driver = evaluating();
+  driver.submit(invalidate(1, 511));
+  driver.submit(b.failure_command(driver.graph, 1, 521, true, false));
+  expect(state_of(driver)).toBeInstanceOf(k.Escalated);
+  driver.submit(new k.ResumeTicket(T1));
+  const state = state_of(driver);
+  if (!(state instanceof k.Work)) throw new Error("not in work");
+  expect(state.execution.input.cause).toEqual(
+    new k.StackInvalidated(t.ContentRef(511)),
+  );
+  expect(state.execution.input.retry_evidence).toEqual([t.ContentRef(521)]);
+  expect(k.graph_invariant(driver.graph)).toBe(true);
+});
