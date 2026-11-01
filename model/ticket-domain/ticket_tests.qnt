@@ -82,6 +82,10 @@ module ticket_tests {
     evaluation: EvaluationInstance,
   ): EvaluationFailureDisposition = EscalateEvaluationFailure
 
+  pure def invalidateZeroPolicy(
+    evaluation: EvaluationInstance,
+  ): EvaluationFailureDisposition = InvalidateEvaluationFailure(0)
+
   pure def invalidatePolicy(
     evaluation: EvaluationInstance,
   ): EvaluationFailureDisposition = InvalidateEvaluationFailure(1601)
@@ -830,12 +834,13 @@ module ticket_tests {
             operation.workCycle == 1 and operation.generation == 2
         | _ => false
       }))
-      .then(check(decide(graph, ReportFinalizationResult({
+      .then(submit(ReportFinalizationResult({
         ticket: 1,
         workCycle: 1,
         generation: 1,
         result: FinalizationSucceeded(1041),
-      }), reworkPolicy) == TicketRefused(FinalizationNotCurrent({
+      })))
+      .then(check(lastDecision == TicketRefused(FinalizationNotCurrent({
         ticket: 1,
         workCycle: 1,
         generation: 1,
@@ -981,7 +986,7 @@ module ticket_tests {
     init
       .then(submit(CreateTicket(released(1, Set()))))
       .then(submit(dispatch(1)))
-      .then(reportWorkResult(1, 1401))
+      .then(reportWorkResultWithSource(1, 1401, 1499))
       .then(reportEvaluatorResult(1, 1411, EvaluatorPass))
       .then(invalidateEvaluation(1, 1421))
       .then(check(decidedEvent == TicketEvaluationInvalidated({
@@ -993,7 +998,7 @@ module ticket_tests {
       .then(check(decidedWorkContexts == [2]))
       .then(check(ticketWorkCycle(1, 2)))
       .then(check(workInvalidatedWith(1, 1421)))
-      .then(check(workUsesSource(1, 1401)))
+      .then(check(workUsesSource(1, 1499)))
       .then(check(workReworkRefs(1) == []))
       .then(check(decisionInvariant))
   }
@@ -1075,6 +1080,15 @@ module ticket_tests {
         InvalidateEvaluation({ ticket: 1, workCycle: 1, evidence: 1711 }),
         reworkPolicy,
       )))
+      .then(check(decide(
+        graph,
+        InvalidateEvaluation({ ticket: 1, workCycle: 1, evidence: 1711 }),
+        invalidatePolicy,
+      ) == decide(
+        graph,
+        InvalidateEvaluation({ ticket: 1, workCycle: 1, evidence: 1711 }),
+        reworkPolicy,
+      )))
   }
 
   run invalidationRunsEvaluationAgainOnFreshTaskIdentitiesTest = {
@@ -1107,7 +1121,7 @@ module ticket_tests {
     init
       .then(submit(CreateTicket(released(1, Set()))))
       .then(submit(dispatch(1)))
-      .then(reportWorkResult(1, 1901))
+      .then(reportWorkResultWithSource(1, 1901, 1999))
       .then(reportEvaluatorResult(1, 1911, EvaluatorFail))
       .then(reportEvaluatorResultWithFailureDisposition(
         1,
@@ -1124,6 +1138,7 @@ module ticket_tests {
       .then(check(decidedWorkContexts == [2]))
       .then(check(ticketWorkCycle(1, 2)))
       .then(check(workInvalidatedWith(1, 1601)))
+      .then(check(workUsesSource(1, 1999)))
       .then(check(workReworkRefs(1) == []))
       .then(check(not(isEscalated(graph.tickets.get(1).state))))
       .then(check(decisionInvariant))
@@ -1179,6 +1194,134 @@ module ticket_tests {
         evidence: 1,
       }))
     ))
+  }
+
+  pure def invalidatedAt(workCycle: int): TicketEvent =
+    TicketEvaluationInvalidated({
+      ticket: 1,
+      workCycle: workCycle,
+      evidence: 2411,
+    })
+
+  run invalidationEvolveIgnoresStaleOrMisplacedEventsTest = {
+    val stale = invalidatedAt(1)
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(check(evolve(graph, stale) == graph))
+      .then(submit(dispatch(1)))
+      .then(check(evolve(graph, stale) == graph))
+      .then(reportWorkResult(1, 2401))
+      .then(check(evolve(graph, invalidatedAt(2)) == graph))
+      .then(check(evolve(graph, invalidatedAt(1)) != graph))
+      .then(invalidateEvaluation(1, 2412))
+      .then(reportWorkResult(1, 2402))
+      .then(check(evolve(graph, stale) == graph))
+      .then(check(evolve(graph, invalidatedAt(2)) != graph))
+      .then(reportEvaluatorResult(1, 2421, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 2422, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 2423, EvaluatorPass))
+      .then(check(ticketFinalizing(1)))
+      .then(check(evolve(graph, invalidatedAt(2)) == graph))
+      .then(reportFinalization(1, FinalizationSucceeded(2431)))
+      .then(check(evolve(graph, invalidatedAt(2)) == graph))
+  }
+
+  run invalidationFromBlockedEvaluationEscalationTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(reportWorkResultWithSource(1, 2501, 2599))
+      .then(reportEvaluatorResult(1, 2511, EvaluatorPass))
+      .then(reportEvaluatorUnavailable(1, 2512))
+      .then(check(isEscalated(graph.tickets.get(1).state)))
+      .then(submit(InvalidateEvaluation({
+        ticket: 1,
+        workCycle: 2,
+        evidence: 2521,
+      })))
+      .then(check(lastDecision == TicketRefused(EvaluationNotCurrent({
+        ticket: 1,
+        workCycle: 2,
+      }))))
+      .then(check(evolve(graph, TicketEvaluationInvalidated({
+        ticket: 1,
+        workCycle: 2,
+        evidence: 2521,
+      })) == graph))
+      .then(submit(InvalidateEvaluation({
+        ticket: 1,
+        workCycle: 1,
+        evidence: 2521,
+      })))
+      .then(check(decidedCancels == []))
+      .then(check(ticketWorkCycle(1, 2)))
+      .then(check(workInvalidatedWith(1, 2521)))
+      .then(check(workUsesSource(1, 2599)))
+      .then(check(decisionInvariant))
+  }
+
+  run invalidationIsRefusedFromAFailureEscalationTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(reportWorkResult(1, 2601))
+      .then(reportEvaluatorResult(1, 2611, EvaluatorFail))
+      .then(reportEvaluatorResultWithFailureDisposition(
+        1,
+        2612,
+        EvaluatorPass,
+        escalatePolicy,
+      ))
+      .then(check(isEscalated(graph.tickets.get(1).state)))
+      .then(submit(InvalidateEvaluation({
+        ticket: 1,
+        workCycle: 1,
+        evidence: 2621,
+      })))
+      .then(check(lastDecision == TicketRefused(EvaluationNotCurrent({
+        ticket: 1,
+        workCycle: 1,
+      }))))
+  }
+
+  run invalidatedWorkFailureResumesWithTheInvalidationCauseTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(reportWorkResult(1, 2701))
+      .then(invalidateEvaluation(1, 2711))
+      .then(reportWorkProcessFailed(1, 2721))
+      .then(check(isEscalated(graph.tickets.get(1).state)))
+      .then(submit(ResumeTicket(1)))
+      .then(check(ticketWorkCycle(1, 3)))
+      .then(check(workInvalidatedWith(1, 2711)))
+      .then(check(workRetryEvidenceHas(1, 2721)))
+      .then(check(decisionInvariant))
+  }
+
+  run policyEvidenceMustBePositiveToInvalidateTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(reportWorkResult(1, 2801))
+      .then(reportEvaluatorResult(1, 2811, EvaluatorFail))
+      .then(check(match graph.tickets.get(1).state {
+        | Evaluation(evaluation) => and {
+            not(decisionValid(graph, decide(
+              graph,
+              ReportTaskTerminal(
+                currentEvaluatorReport(1, evaluation, 2812, EvaluatorPass)),
+              invalidateZeroPolicy,
+            ))),
+            decisionValid(graph, decide(
+              graph,
+              ReportTaskTerminal(
+                currentEvaluatorReport(1, evaluation, 2812, EvaluatorPass)),
+              invalidatePolicy,
+            )),
+          }
+        | _ => false
+      }))
   }
 
   def modelInvariant = graphInvariant(graph) and decisionInvariant

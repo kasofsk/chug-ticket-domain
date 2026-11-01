@@ -1011,6 +1011,15 @@ export function evaluation_rework_input(
 ): WorkInput {
   return new WorkInput(d.content, new EvaluationRework(entries), []);
 }
+function invalidatable_evaluation(s: TicketState): EvaluationInstance | null {
+  if (s instanceof Evaluation) return s.evaluation;
+  if (
+    s instanceof Escalated &&
+    s.escalation instanceof EvaluationBlockedEscalated
+  )
+    return s.escalation.evaluation;
+  return null;
+}
 export function invalidated_work_input(
   d: ReleasedTicket,
   e: ContentRef,
@@ -1192,10 +1201,8 @@ export function decide(
         ]);
   }
   if (c instanceof InvalidateEvaluation) {
-    if (
-      !(t.state instanceof Evaluation) ||
-      t.state.evaluation.work_cycle !== c.work_cycle
-    )
+    const evaluation = invalidatable_evaluation(t.state);
+    if (!evaluation || evaluation.work_cycle !== c.work_cycle)
       return refuse(new EvaluationNotCurrent(id, c.work_cycle));
     return decided(
       new TicketEvaluationInvalidated(id, c.work_cycle, c.evidence),
@@ -1204,7 +1211,7 @@ export function decide(
         execute_work(
           t,
           next_cycle_number(t),
-          t.state.evaluation.input.accepted_source_ref,
+          evaluation.input.accepted_source_ref,
           invalidated_work_input(t.definition, c.evidence),
         ),
       ],
@@ -1459,15 +1466,17 @@ function _evolve(g: TicketGraph, f: TicketEvent): TicketGraph | null {
       : null;
   if (f instanceof TicketRevoked)
     return revocation_allowed(s) ? put(new Revoked()) : null;
-  if (f instanceof TicketEvaluationInvalidated)
-    return s instanceof Evaluation && s.evaluation.work_cycle === f.work_cycle
+  if (f instanceof TicketEvaluationInvalidated) {
+    const evaluation = invalidatable_evaluation(s);
+    return evaluation && evaluation.work_cycle === f.work_cycle
       ? _enter_work_cycle(
           g,
           t,
           invalidated_work_input(t.definition, f.evidence),
-          s.evaluation.input.accepted_source_ref,
+          evaluation.input.accepted_source_ref,
         )
       : null;
+  }
   if (f instanceof TicketWorkResumed) {
     if (!(s instanceof Escalated)) return null;
     const e = s.escalation;
@@ -1787,27 +1796,37 @@ function _obligation_agrees(
   const s = evolved.tickets.get(o.ticket)?.state;
   return s instanceof Finalization && equal(s.operation, o.finalization);
 }
-const _TERMINAL_EVENTS = [
-  TicketWorkResultAccepted,
-  TicketWorkProcessFailed,
-  TicketWorkExecutionUnavailable,
-  TicketEvaluationProgressed,
-  TicketEvaluationPassed,
-  TicketEvaluationReworkStarted,
-  TicketEvaluationFailureEscalated,
-  TicketEvaluationFailureInvalidated,
-  TicketEvaluationBlocked,
-];
+function _reported_tasks(f: TicketEvent): readonly TaskId[] {
+  if (
+    f instanceof TicketWorkProcessFailed ||
+    f instanceof TicketWorkExecutionUnavailable
+  )
+    return [f.task];
+  if (f instanceof TicketWorkResultAccepted) return [f.result.obligation.task];
+  if (
+    f instanceof TicketEvaluationProgressed ||
+    f instanceof TicketEvaluationPassed ||
+    f instanceof TicketEvaluationReworkStarted ||
+    f instanceof TicketEvaluationFailureEscalated ||
+    f instanceof TicketEvaluationFailureInvalidated ||
+    f instanceof TicketEvaluationBlocked
+  )
+    return [report_task(f.report)];
+  return [];
+}
 function _orphans_cancelled(
   prior: TicketGraph,
   evolved: TicketGraph,
+  event: TicketEvent,
   obligations: readonly Obligation[],
 ): boolean {
+  const reported = _reported_tasks(event);
   return [...prior.tickets.keys()].every((id) => {
     const after = ticket_live_tasks(evolved, id);
     return ticket_live_tasks(prior, id).every(
       (task) =>
         list_has_task(after, task) ||
+        list_has_task(reported, task) ||
         obligations.some(
           (o) =>
             o instanceof CancelTask && o.ticket === id && equal(o.task, task),
@@ -1819,8 +1838,7 @@ export function decision_valid(g: TicketGraph, d: TicketDecision): boolean {
   if (d instanceof TicketRefused) return equal(apply_decision(g, d), g);
   const evolved = evolve(g, d.event);
   return (
-    (_TERMINAL_EVENTS.some((c) => d.event instanceof c) ||
-      _orphans_cancelled(g, evolved, d.obligations)) &&
+    _orphans_cancelled(g, evolved, d.event, d.obligations) &&
     d.obligations.every(
       (o, i) =>
         _obligation_valid(o) &&

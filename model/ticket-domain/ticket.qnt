@@ -665,6 +665,31 @@ module ticket_domain {
                 invalidatedWorkInput(ticket.definition, request.evidence),
               )]),
             )
+        | Escalated(escalation) => match escalation {
+            | EvaluationBlockedEscalated(saved) =>
+                if (saved.workCycle != request.workCycle)
+                  refused(EvaluationNotCurrent({
+                    ticket: request.ticket,
+                    workCycle: request.workCycle,
+                  }))
+                else decided(
+                  TicketEvaluationInvalidated({
+                    ticket: request.ticket,
+                    workCycle: request.workCycle,
+                    evidence: request.evidence,
+                  }),
+                  [executeWork(
+                    ticket,
+                    nextCycleNumber(ticket),
+                    saved.input.acceptedSourceRef,
+                    invalidatedWorkInput(ticket.definition, request.evidence),
+                  )],
+                )
+            | _ => refused(EvaluationNotCurrent({
+              ticket: request.ticket,
+              workCycle: request.workCycle,
+            }))
+          }
         | _ => refused(EvaluationNotCurrent({
           ticket: request.ticket,
           workCycle: request.workCycle,
@@ -1202,6 +1227,17 @@ module ticket_domain {
                 invalidatedWorkInput(ticket.definition, invalidated.evidence),
                 evaluation.input.acceptedSourceRef,
               )
+          | Escalated(escalation) => match escalation {
+              | EvaluationBlockedEscalated(saved) =>
+                  if (saved.workCycle != invalidated.workCycle) graph
+                  else enterWorkCycle(
+                    graph,
+                    ticket,
+                    invalidatedWorkInput(ticket.definition, invalidated.evidence),
+                    saved.input.acceptedSourceRef,
+                  )
+              | _ => graph
+            }
           | _ => graph
         }
       }
@@ -1493,18 +1529,19 @@ module ticket_domain {
         }
   }
 
-  pure def terminalClassEvent(event: TicketEvent): bool = match event {
-    | TicketWorkResultAccepted(_) => true
-    | TicketWorkProcessFailed(_) => true
-    | TicketWorkExecutionUnavailable(_) => true
-    | TicketEvaluationProgressed(_) => true
-    | TicketEvaluationPassed(_) => true
-    | TicketEvaluationReworkStarted(_) => true
-    | TicketEvaluationFailureEscalated(_) => true
-    | TicketEvaluationFailureInvalidated(_) => true
-    | TicketEvaluationBlocked(_) => true
-    | _ => false
-  }
+  pure def reportedTasks(event: TicketEvent): List[TaskIdentity] =
+    match event {
+      | TicketWorkResultAccepted(accepted) => [accepted.result.obligation.task]
+      | TicketWorkProcessFailed(failure) => [failure.task]
+      | TicketWorkExecutionUnavailable(failure) => [failure.task]
+      | TicketEvaluationProgressed(fact) => [reportTask(fact.report)]
+      | TicketEvaluationPassed(fact) => [reportTask(fact.report)]
+      | TicketEvaluationReworkStarted(fact) => [reportTask(fact.report)]
+      | TicketEvaluationFailureEscalated(fact) => [reportTask(fact.report)]
+      | TicketEvaluationFailureInvalidated(fact) => [reportTask(fact.report)]
+      | TicketEvaluationBlocked(fact) => [reportTask(fact.report)]
+      | _ => []
+    }
 
   pure def obligationsCancel(
     obligations: List[Obligation],
@@ -1520,12 +1557,15 @@ module ticket_domain {
   pure def orphansCancelled(
     prior: TicketGraph,
     evolved: TicketGraph,
+    event: TicketEvent,
     obligations: List[Obligation],
   ): bool = prior.tickets.keys().forall(ticket => {
     val before = ticketLiveTasks(prior, ticket)
     val after = ticketLiveTasks(evolved, ticket)
+    val reported = reportedTasks(event)
     before.indices().forall(index =>
       listHasTask(after, before[index])
+      or listHasTask(reported, before[index])
       or obligationsCancel(obligations, ticket, before[index]))
   })
 
@@ -1540,8 +1580,7 @@ module ticket_domain {
           obligationValid(success.obligations[index])
           and obligationAgrees(graph, evolved, success.obligations[index]))
         and obligationsUnique(success.obligations)
-        and (terminalClassEvent(success.event)
-          or orphansCancelled(graph, evolved, success.obligations))
+        and orphansCancelled(graph, evolved, success.event, success.obligations)
         and graphInvariant(evolved)
       }
   }
