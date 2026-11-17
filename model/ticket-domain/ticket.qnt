@@ -1689,14 +1689,15 @@ module ticket_domain {
         and failedBasisEntries(operation.basis).length() > 0
   }
 
-  // Round 1 is the one a work result opened, and a later round answers a
-  // request made by an earlier operation of the same work cycle.
+  // Round 1 is the one a work result opened. A later round answers a request
+  // made by an earlier operation of the same work cycle, which was of the
+  // round before, so an operation's generation is never below its round.
   pure def finalizationOriginValid(operation: FinalizationOperation): bool =
     match operation.origin {
-      | OpenedByWork => operation.round == 1
+      | OpenedByWork => operation.round == 1 and operation.generation > 0
       | Requested(request) =>
           operation.round > 1
-          and request.generation > 0
+          and request.generation >= operation.round - 1
           and request.generation < operation.generation
           and request.evidence > 0
     }
@@ -1706,8 +1707,6 @@ module ticket_domain {
     operation: FinalizationOperation,
   ): bool =
     operation.workCycle == ticket.workCyclesStarted
-    and operation.round > 0
-    and operation.generation >= operation.round
     and operation.input > 0
     and operation.source > 0
     and finalizationOriginValid(operation)

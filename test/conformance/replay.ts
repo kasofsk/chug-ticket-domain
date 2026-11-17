@@ -70,10 +70,6 @@ function picked_result(picks: Picks): k.FinalizationResult {
       throw new ConversionError(`unknown picked result ${result.tag}`);
   }
 }
-/** `anotherCycle` of `ticket_tests.qnt`. */
-function another_cycle(cycle: number): number {
-  return cycle > 1 ? cycle - 1 : cycle + 1;
-}
 /** `drifted` of `ticket_tests.qnt`: the address a stray command names. */
 function drifted(
   cycle: number,
@@ -85,7 +81,7 @@ function drifted(
     case "OnTarget":
       return { cycle, ordinal };
     case "AnotherCycle":
-      return { cycle: another_cycle(cycle), ordinal };
+      return { cycle: cycle + 1, ordinal };
     case "Earlier":
       return { cycle, ordinal: ordinal > 1 ? ordinal - 1 : ordinal + 2 };
     case "Later":
@@ -99,16 +95,12 @@ function first_ticket(prior: k.TicketGraph): k.Ticket {
   if (!ticket) throw new ConversionError("a stray step needs ticket 1");
   return ticket;
 }
-/** `strayCycle` of `ticket_tests.qnt`. */
-function stray_cycle(ticket: k.Ticket): number {
-  return ticket.work_cycles_started > 0 ? ticket.work_cycles_started : 1;
-}
 function stray_finalization(prior: k.TicketGraph, picks: Picks) {
   const ticket = first_ticket(prior),
     state = ticket.state;
   return state instanceof k.Finalization
     ? drifted(state.operation.work_cycle, state.operation.generation, picks)
-    : drifted(stray_cycle(ticket), 1, picks);
+    : drifted(ticket.work_cycles_started, 1, picks);
 }
 function stray_invalidation(prior: k.TicketGraph, picks: Picks) {
   const ticket = first_ticket(prior),
@@ -122,7 +114,7 @@ function stray_invalidation(prior: k.TicketGraph, picks: Picks) {
           : null;
   return held
     ? drifted(held.work_cycle, held.round, picks)
-    : drifted(stray_cycle(ticket), 1, picks);
+    : drifted(ticket.work_cycles_started, 1, picks);
 }
 /** `driftedTask(strayTaskBase(ticket), taskDrift)` of `ticket_tests.qnt`. */
 function stray_task(prior: k.TicketGraph, picks: Picks): t.EvaluationTaskId {
@@ -136,7 +128,7 @@ function stray_task(prior: k.TicketGraph, picks: Picks): t.EvaluationTaskId {
         ? current
         : new t.EvaluationTaskId(
             t.TicketId(1),
-            t.CycleNumber(stray_cycle(ticket)),
+            t.CycleNumber(ticket.work_cycles_started),
             t.Round(1),
             t.StageKey(10),
             t.Generation(1),
@@ -162,15 +154,15 @@ function stray_task(prior: k.TicketGraph, picks: Picks): t.EvaluationTaskId {
     case "SameTask":
       return base;
     case "TaskOfAnotherCycle":
-      return task({ cycle: another_cycle(base.work_cycle) });
+      return task({ cycle: base.work_cycle + 1 });
     case "TaskOfAnotherRound":
-      return task({ round: base.round > 1 ? base.round - 1 : 2 });
+      return task({ round: base.round + 1 });
     case "TaskOfAnotherStage":
-      return task({ stage: base.stage === 10 ? 20 : 10 });
+      return task({ stage: base.stage + 10 });
     case "TaskOfAnotherGeneration":
       return task({ generation: base.generation + 1 });
     case "TaskOfAnotherEvaluator":
-      return task({ evaluator: base.evaluator === 11 ? 12 : 11 });
+      return task({ evaluator: base.evaluator + 1 });
     default:
       throw new ConversionError(`unknown picked task drift ${drift}`);
   }
@@ -528,35 +520,45 @@ export const ESCALATING: readonly k.EvaluationFailurePolicy[] = [
   UNRECOGNISED,
 ];
 /**
- * What a simulation step shows that the corpus must hold at least once, so
- * that every part of a command replay rebuilds from picks is one some
- * decision in the corpus depends on.
+ * Situations the simulation traces must hold at least once: every value a
+ * stray step can pick, and those where the decision depends on something
+ * replay rebuilt from the picks or from the prior graph (a payload that is
+ * judged, an address read from a state where a wrong reading differs, or the
+ * policy in force).
  */
-export const REQUIRED_FEATURES = [
+const DRIFTS = ["OnTarget", "AnotherCycle", "Earlier", "Later"],
+  TASK_DRIFTS = [
+    "SameTask",
+    "TaskOfAnotherCycle",
+    "TaskOfAnotherRound",
+    "TaskOfAnotherStage",
+    "TaskOfAnotherGeneration",
+    "TaskOfAnotherEvaluator",
+  ];
+export const REQUIRED_FEATURES: readonly string[] = [
   "a stray produced evaluator report is accepted",
   "a stray evaluator failure is accepted",
   "a stray evaluator report is refused during an evaluation",
-  "a stray Succeeded is addressed to the current operation",
-  "a stray NeedsEvaluation is addressed to the current operation",
-  "a stray FailureStands is addressed to the current operation",
+  "a stray Succeeded is accepted",
+  "a stray NeedsEvaluation is accepted",
+  "a stray FailureStands is accepted",
+  "a stray finalization report meets an operation whose generation is not its round",
   "a stray finalization report is refused as not current during a finalization",
   "a stray finalization report for another work cycle is refused at the current generation",
   "a stray finalization report is refused as not allowed",
   "a stray invalidation is accepted",
   "a stray invalidation is refused during an evaluation",
+  "a stray invalidation meets a blocked requested round",
+  "a stray command for an earlier generation or round meets a later one",
+  "an invalidation meets a blocked evaluation",
   "the escalating policy meets a failure that stands",
   "the invalidating policy meets a failure that stands",
   "the walk starts again",
-] as const;
-type Feature = (typeof REQUIRED_FEATURES)[number];
-const ON_TARGET: Record<string, Feature> = {
-  FinalizationSucceeded:
-    "a stray Succeeded is addressed to the current operation",
-  FinalizationNeedsEvaluation:
-    "a stray NeedsEvaluation is addressed to the current operation",
-  FinalizationFailureStands:
-    "a stray FailureStands is addressed to the current operation",
-};
+  ...DRIFTS.map((drift) => `a stray finalization report drifts ${drift}`),
+  ...DRIFTS.map((drift) => `a stray invalidation drifts ${drift}`),
+  ...TASK_DRIFTS.map((drift) => `a stray evaluator report drifts ${drift}`),
+];
+type Feature = string;
 export function step_features(
   step: DecisionStep,
   prior: k.TicketGraph,
@@ -574,8 +576,24 @@ export function step_features(
     stands =
       decision instanceof k.TicketDecided &&
       decision.event instanceof k.TicketFinalizationFailureEscalated;
+  const earlier = (ordinal: number) => {
+    if (pick_variant(picks, "drift").tag === "Earlier" && ordinal > 1)
+      found.push(
+        "a stray command for an earlier generation or round meets a later one",
+      );
+  };
   switch (step.action) {
+    case "invalidateOne":
+      if (
+        state instanceof k.Escalated &&
+        state.escalation instanceof k.EvaluationBlockedEscalated
+      )
+        found.push("an invalidation meets a blocked evaluation");
+      break;
     case "strayEvaluatorOne":
+      found.push(
+        `a stray evaluator report drifts ${pick_variant(picks, "taskDrift").tag}`,
+      );
       if (decided)
         found.push(
           pick_variant(picks, "outcome").tag === "StrayFail"
@@ -586,10 +604,26 @@ export function step_features(
         found.push("a stray evaluator report is refused during an evaluation");
       break;
     case "strayFinalizationOne":
+      found.push(
+        `a stray finalization report drifts ${pick_variant(picks, "drift").tag}`,
+      );
       if (!(state instanceof k.Finalization)) break;
-      if (pick_variant(picks, "drift").tag === "OnTarget") {
-        const feature = ON_TARGET[pick_variant(picks, "result").tag];
-        if (feature) found.push(feature);
+      earlier(state.operation.generation);
+      if (Number(state.operation.generation) !== Number(state.operation.round))
+        found.push(
+          "a stray finalization report meets an operation whose generation is not its round",
+        );
+      if (decision instanceof k.TicketDecided) {
+        const event = decision.event;
+        if (event instanceof k.TicketFinalizationSucceeded)
+          found.push("a stray Succeeded is accepted");
+        if (event instanceof k.TicketFinalizationNeedsEvaluation)
+          found.push("a stray NeedsEvaluation is accepted");
+        if (
+          event instanceof k.TicketFinalizationFailureReworked ||
+          event instanceof k.TicketFinalizationFailureEscalated
+        )
+          found.push("a stray FailureStands is accepted");
       }
       if (refusal === "FinalizationNotCurrent") {
         found.push(
@@ -604,9 +638,19 @@ export function step_features(
         found.push("a stray finalization report is refused as not allowed");
       break;
     case "strayInvalidateOne":
+      found.push(
+        `a stray invalidation drifts ${pick_variant(picks, "drift").tag}`,
+      );
+      if (state instanceof k.Evaluation) earlier(state.evaluation.round);
       if (decided) found.push("a stray invalidation is accepted");
       else if (evaluating)
         found.push("a stray invalidation is refused during an evaluation");
+      if (
+        state instanceof k.Escalated &&
+        state.escalation instanceof k.EvaluationBlockedEscalated &&
+        state.escalation.evaluation.round > 1
+      )
+        found.push("a stray invalidation meets a blocked requested round");
       break;
     case "failureStandsEscalatedOne":
       if (stands)

@@ -84,8 +84,9 @@ Every domain value is a frozen class with a literal `readonly kind`
 discriminator and a union type over the variants; collections are copied and
 frozen in the constructor. Model a legal phase as its own variant carrying
 exactly the data valid in that phase rather than a common record with optional
-fields. `int > 0` in the model becomes a positive-checked branded number, so
-the model's positivity predicates live in constructors. Store released inputs
+fields. `int > 0` in the model becomes a branded number. A brand checks
+nothing, so the model's positivity predicates are transcribed where the model
+has them: `validate_command` and the invariants. Store released inputs
 and committed facts; derive readiness, current task identities and other
 deterministic consequences. A refusal is a domain outcome; infrastructure
 inability is not. Function names are `snake_case`.

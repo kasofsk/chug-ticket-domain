@@ -618,6 +618,237 @@ const with_operation = (
   );
 };
 
+const operation_with = (
+  o: k.FinalizationOperation,
+  change: {
+    work_cycle?: number;
+    round?: number;
+    generation?: number;
+    input?: number;
+    source?: number;
+    origin?: e.EvaluationOrigin;
+    basis?: k.FinalizationBasis;
+  },
+) =>
+  new k.FinalizationOperation(
+    t.CycleNumber(change.work_cycle ?? o.work_cycle),
+    t.Round(change.round ?? o.round),
+    t.Generation(change.generation ?? o.generation),
+    t.ContentRef(change.input ?? o.input),
+    t.ContentRef(change.source ?? o.source),
+    change.origin ?? o.origin,
+    change.basis ?? o.basis,
+  );
+const with_state = (
+  d: b.Driver,
+  state: k.TicketState,
+  id: t.TicketId = T1,
+  work_cycles_started?: number,
+) => {
+  const ticket = d.graph.tickets.get(id)!;
+  return new k.TicketGraph(
+    new Map([
+      ...d.graph.tickets,
+      [
+        id,
+        new k.Ticket(
+          ticket.definition,
+          ticket.revision,
+          work_cycles_started ?? ticket.work_cycles_started,
+          state,
+        ),
+      ],
+    ]),
+  );
+};
+const valid = (d: b.Driver, state: k.TicketState) =>
+  k.graph_invariant(with_state(d, state));
+
+test("a round requested after a resume is the next round and names the generation that asked", () => {
+  const driver = passed_once();
+  driver.submit(
+    report(1, new k.FinalizationResultUnavailable(t.ContentRef(610))),
+  );
+  // An escalated finalization is held to the same rules as a waiting one.
+  const escalated = state_of(driver);
+  if (
+    !(escalated instanceof k.Escalated) ||
+    !(escalated.escalation instanceof k.FinalizationUnavailableEscalated)
+  )
+    throw new Error("not escalated at finalization");
+  const held = escalated.escalation.escalation;
+  expect(k.graph_invariant(driver.graph)).toBe(true);
+  expect(
+    valid(
+      driver,
+      new k.Escalated(
+        new k.FinalizationUnavailableEscalated(
+          new k.FinalizationEscalation(
+            operation_with(held.finalization, { input: 0 }),
+            held.evidence,
+          ),
+        ),
+      ),
+    ),
+  ).toBe(false);
+  driver.submit(new k.ResumeTicket(T1));
+  expect([finalization(driver).round, finalization(driver).generation]).toEqual(
+    [1, 2],
+  );
+  const requested = request(driver, 2, 620);
+  expect(k.decision_valid(driver.prior_graph, requested)).toBe(true);
+  const running = state_of(driver);
+  if (!(running instanceof k.Evaluation)) throw new Error("not evaluating");
+  const asked = new e.Requested(t.Generation(2), t.ContentRef(620));
+  expect(running.evaluation.round).toBe(2);
+  expect(running.evaluation.origin).toEqual(asked);
+  // A running round is held to the request that opened it.
+  const reopened = (origin: e.EvaluationOrigin) =>
+    new k.Evaluation(
+      new e.EvaluationInstance(
+        running.evaluation.work_cycle,
+        running.evaluation.round,
+        origin,
+        running.evaluation.input,
+        running.evaluation.plan,
+        running.evaluation.state,
+      ),
+    );
+  expect(valid(driver, reopened(asked))).toBe(true);
+  for (const origin of [
+    new e.Requested(t.Generation(0), t.ContentRef(620)),
+    new e.Requested(t.Generation(2), t.ContentRef(0)),
+    new e.OpenedByWork(),
+  ])
+    expect(valid(driver, reopened(origin))).toBe(false);
+  pass(driver, 621);
+  pass(driver, 622);
+  const passed = pass(driver, 623);
+  expect(k.decision_valid(driver.prior_graph, passed)).toBe(true);
+  const operation = finalization(driver);
+  expect([operation.round, operation.generation]).toEqual([2, 3]);
+  expect(operation.origin).toEqual(asked);
+  expect(operation.basis).toBeInstanceOf(k.PassedVerdict);
+  // A report for the operation that asked is stale, and completes nothing.
+  expect(
+    driver.submit(report(2, new k.FinalizationSucceeded(t.ContentRef(630)))),
+  ).toEqual(not_current(2));
+  expect(
+    k.evolve(driver.graph, new k.TicketFinalizationSucceeded(...fact(2))),
+  ).toBe(driver.graph);
+  driver.submit(report(3, new k.FinalizationSucceeded(t.ContentRef(631))));
+  expect(state_of(driver)).toBeInstanceOf(k.Done);
+});
+
+test("a failed basis is held to its operation in every part", () => {
+  const driver = passed_once();
+  driver.submit(new k.CreateTicket(b.released(2)));
+  driver.submit(
+    report(1, new k.FinalizationResultUnavailable(t.ContentRef(710))),
+  );
+  driver.submit(new k.ResumeTicket(T1));
+  request(driver, 2, 720);
+  fail(driver, 721);
+  pass(driver, 722);
+  const operation = finalization(driver);
+  const basis = operation.basis;
+  if (!(basis instanceof k.FailedVerdict)) throw new Error("not failed");
+  const failed = basis.evaluation;
+  expect([operation.round, operation.generation]).toEqual([2, 3]);
+  expect(k.graph_invariant(driver.graph)).toBe(true);
+  const forged = (change: Parameters<typeof operation_with>[1]) =>
+    valid(driver, new k.Finalization(operation_with(operation, change)));
+  expect(forged({})).toBe(true);
+  expect(forged({ round: 3 })).toBe(false);
+  expect(forged({ input: operation.input + 1 })).toBe(false);
+  expect(forged({ source: operation.source + 1 })).toBe(false);
+  // The ticket and its operation in a later work cycle.
+  expect(
+    k.graph_invariant(
+      with_state(
+        driver,
+        new k.Finalization(operation_with(operation, { work_cycle: 2 })),
+        T1,
+        2,
+      ),
+    ),
+  ).toBe(false);
+  // The operation on another ticket.
+  expect(
+    k.graph_invariant(
+      with_state(driver, new k.Finalization(operation), t.TicketId(2), 1),
+    ),
+  ).toBe(false);
+  // The same round still running.
+  const running = e.begin(
+    failed.work_cycle,
+    failed.round,
+    failed.origin,
+    failed.input,
+    failed.plan,
+  );
+  expect(e.evaluation_invariant(running)).toBe(true);
+  expect(forged({ basis: new k.FailedVerdict(running) })).toBe(false);
+  // No valid evaluation.
+  expect(
+    forged({
+      basis: new k.FailedVerdict(
+        new e.EvaluationInstance(
+          failed.work_cycle,
+          failed.round,
+          failed.origin,
+          failed.input,
+          new e.EvaluationPlan([]),
+          failed.state,
+        ),
+      ),
+    }),
+  ).toBe(false);
+});
+
+test("a failed basis is a requested round's", () => {
+  const driver = evaluating();
+  fail(driver, 801);
+  const state = state_of(driver);
+  if (!(state instanceof k.Evaluation)) throw new Error("not evaluating");
+  const last = b.evaluator_result_command(
+    driver.graph,
+    1,
+    802,
+    new e.EvaluatorPass(),
+  );
+  if (!(last instanceof k.ReportTaskTerminal)) throw new Error("no report");
+  // Nor is round 1 ever a requested one.
+  expect(
+    valid(
+      driver,
+      new k.Evaluation(
+        new e.EvaluationInstance(
+          state.evaluation.work_cycle,
+          state.evaluation.round,
+          new e.Requested(t.Generation(1), t.ContentRef(803)),
+          state.evaluation.input,
+          state.evaluation.plan,
+          state.evaluation.state,
+        ),
+      ),
+    ),
+  ).toBe(false);
+  const failed = k.apply_evaluation_report(state.evaluation, last.report);
+  const operation = k.finalization_after(failed, new k.FailedVerdict(failed));
+  expect(e.evaluation_invariant(failed)).toBe(true);
+  expect(k.failed_basis_entries(operation.basis).length).toBeGreaterThan(0);
+  expect(valid(driver, new k.Finalization(operation))).toBe(false);
+  expect(
+    valid(
+      driver,
+      new k.Finalization(
+        operation_with(operation, { basis: new k.PassedVerdict() }),
+      ),
+    ),
+  ).toBe(true);
+});
+
 test("a finalization operation names the request its verdict answers", () => {
   const driver = passed_once();
   expect(finalization(driver).origin).toEqual(new e.OpenedByWork());
@@ -657,6 +888,22 @@ test("a finalization operation names the request its verdict answers", () => {
     );
   expect(k.graph_invariant(forged(requested))).toBe(true);
   expect(k.graph_invariant(forged(new e.OpenedByWork()))).toBe(false);
+  // A request carries evidence and comes from the round before, the first
+  // operation of a cycle is generation 1 or later, and an operation is of
+  // the ticket's current work cycle.
+  const reshaped = (change: Parameters<typeof operation_with>[1]) =>
+    valid(
+      driver,
+      new k.Finalization(operation_with(finalization(driver), change)),
+    );
+  const first = { round: 1, origin: new e.OpenedByWork() };
+  expect(
+    reshaped({ origin: new e.Requested(t.Generation(1), t.ContentRef(0)) }),
+  ).toBe(false);
+  expect(reshaped({ round: 3, generation: 4 })).toBe(false);
+  expect(reshaped({ ...first, generation: 1 })).toBe(true);
+  expect(reshaped({ ...first, generation: 0 })).toBe(false);
+  expect(reshaped({ work_cycle: 2 })).toBe(false);
   expect(
     k.graph_invariant(
       forged(new e.Requested(t.Generation(3), t.ContentRef(610))),
@@ -905,10 +1152,48 @@ test("a decision obliges every task it starts and every finalization it opens", 
   expect(
     k.decision_valid(driver.prior_graph, without(requested, "ExecuteTask")),
   ).toBe(false);
+  if (!(requested instanceof k.TicketDecided)) throw new Error("not decided");
+  const [first, second] = requested.obligations;
+  if (!first || !second) throw new Error("not two tasks");
+  // One of the two tasks it started is not all of them, and one named twice
+  // is one too many.
+  expect(
+    k.decision_valid(
+      driver.prior_graph,
+      new k.TicketDecided(requested.event, [first]),
+    ),
+  ).toBe(false);
+  expect(
+    k.decision_valid(
+      driver.prior_graph,
+      new k.TicketDecided(requested.event, [first, second, second]),
+    ),
+  ).toBe(false);
   const withdrawn = driver.submit(invalidate(1, 620, 2));
   expect(k.decision_valid(driver.prior_graph, withdrawn)).toBe(true);
   expect(
     k.decision_valid(driver.prior_graph, without(withdrawn, "FinalizeTicket")),
+  ).toBe(false);
+  // Nor one more finalization than the one the ticket entered.
+  if (!(withdrawn instanceof k.TicketDecided)) throw new Error("not decided");
+  const entered = withdrawn.obligations.find(
+    (o): o is k.FinalizeTicket => o instanceof k.FinalizeTicket,
+  );
+  if (!entered) throw new Error("no finalization");
+  expect(
+    k.decision_valid(
+      driver.prior_graph,
+      new k.TicketDecided(withdrawn.event, [
+        ...withdrawn.obligations,
+        new k.FinalizeTicket(
+          entered.ticket,
+          operation_with(entered.finalization, {
+            generation: entered.finalization.generation + 1,
+          }),
+          entered.configuration,
+        ),
+      ]),
+    ),
   ).toBe(false);
   request(driver, 2, 630);
   fail(driver, 631);

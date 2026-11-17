@@ -9,13 +9,14 @@
     "0x96af9ca5"
   ],
   "finalizerSeeds": [
-    "0x36fbef9f",
     "0x54021d70",
-    "0xb9f45639",
+    "0x7d37a438",
+    "0x7f9a3c08",
+    "0x99c008a8",
     "0xbe1e08bb",
-    "0xea33f0b4",
-    "0xfa8cfc2d",
-    "0xfd1f9ecf"
+    "0xda0af00d",
+    "0xe25e5511",
+    "0xfd4fa9a1"
   ],
   "simulationSteps": 25,
   "invariant": "modelInvariant",
@@ -9643,7 +9644,7 @@
       "file": "scenario-finalizationReportFromAnEarlierWorkCycleIsRefusedTest.itf.json",
       "kind": "scenario",
       "scenario": "finalizationReportFromAnEarlierWorkCycleIsRefusedTest",
-      "states": 18,
+      "states": 19,
       "steps": [
         {
           "index": 0,
@@ -9736,10 +9737,10 @@
           "action": null,
           "decision": {
             "outcome": "decided",
-            "tag": "TicketWorkResultAccepted"
+            "tag": "TicketFinalizationNeedsWork"
           },
           "tickets": {
-            "1": "Evaluation"
+            "1": "Work"
           }
         },
         {
@@ -9747,7 +9748,7 @@
           "action": null,
           "decision": {
             "outcome": "decided",
-            "tag": "TicketEvaluationProgressed"
+            "tag": "TicketWorkResultAccepted"
           },
           "tickets": {
             "1": "Evaluation"
@@ -9769,10 +9770,10 @@
           "action": null,
           "decision": {
             "outcome": "decided",
-            "tag": "TicketEvaluationPassed"
+            "tag": "TicketEvaluationProgressed"
           },
           "tickets": {
-            "1": "Finalization"
+            "1": "Evaluation"
           }
         },
         {
@@ -9790,8 +9791,8 @@
           "index": 13,
           "action": null,
           "decision": {
-            "outcome": "refused",
-            "tag": "FinalizationNotCurrent"
+            "outcome": "decided",
+            "tag": "TicketEvaluationPassed"
           },
           "tickets": {
             "1": "Finalization"
@@ -9823,6 +9824,17 @@
           "index": 16,
           "action": null,
           "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 17,
+          "action": null,
+          "decision": {
             "outcome": "decided",
             "tag": "TicketFinalizationSucceeded"
           },
@@ -9831,7 +9843,7 @@
           }
         },
         {
-          "index": 17,
+          "index": 18,
           "action": null,
           "decision": {
             "outcome": "decided",
@@ -10317,6 +10329,493 @@
             "1": "Finalization",
             "2": "Pending",
             "3": "Revoked"
+          }
+        }
+      ]
+    },
+    {
+      "file": "scenario-requestedRoundAfterAResumeTest.itf.json",
+      "kind": "scenario",
+      "scenario": "requestedRoundAfterAResumeTest",
+      "states": 22,
+      "steps": [
+        {
+          "index": 0,
+          "action": null,
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {}
+        },
+        {
+          "index": 1,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketCreated"
+          },
+          "tickets": {
+            "1": "Pending"
+          }
+        },
+        {
+          "index": 2,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketDispatched"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 3,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketWorkResultAccepted"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 4,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 5,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 6,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationPassed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 7,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationUnavailable"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 8,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationUnavailable"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 9,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationResumed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 10,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationResumed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 11,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsEvaluation"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 12,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsEvaluation"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 13,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 14,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 15,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationPassed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 16,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationPassed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 17,
+          "action": null,
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 18,
+          "action": null,
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 19,
+          "action": null,
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 20,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationSucceeded"
+          },
+          "tickets": {
+            "1": "Done"
+          }
+        },
+        {
+          "index": 21,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationSucceeded"
+          },
+          "tickets": {
+            "1": "Done"
+          }
+        }
+      ]
+    },
+    {
+      "file": "scenario-failedBasisIsHeldInEveryPartTest.itf.json",
+      "kind": "scenario",
+      "scenario": "failedBasisIsHeldInEveryPartTest",
+      "states": 14,
+      "steps": [
+        {
+          "index": 0,
+          "action": null,
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {}
+        },
+        {
+          "index": 1,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketCreated"
+          },
+          "tickets": {
+            "1": "Pending"
+          }
+        },
+        {
+          "index": 2,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketDispatched"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 3,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketWorkResultAccepted"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 4,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 5,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 6,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationPassed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 7,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketCreated"
+          },
+          "tickets": {
+            "1": "Finalization",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 8,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationUnavailable"
+          },
+          "tickets": {
+            "1": "Escalated",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 9,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationResumed"
+          },
+          "tickets": {
+            "1": "Finalization",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 10,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsEvaluation"
+          },
+          "tickets": {
+            "1": "Evaluation",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 11,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 12,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationFailureReturned"
+          },
+          "tickets": {
+            "1": "Finalization",
+            "2": "Pending"
+          }
+        },
+        {
+          "index": 13,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationFailureReturned"
+          },
+          "tickets": {
+            "1": "Finalization",
+            "2": "Pending"
+          }
+        }
+      ]
+    },
+    {
+      "file": "scenario-failedBasisIsARequestedRoundTest.itf.json",
+      "kind": "scenario",
+      "scenario": "failedBasisIsARequestedRoundTest",
+      "states": 6,
+      "steps": [
+        {
+          "index": 0,
+          "action": null,
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {}
+        },
+        {
+          "index": 1,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketCreated"
+          },
+          "tickets": {
+            "1": "Pending"
+          }
+        },
+        {
+          "index": 2,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketDispatched"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 3,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketWorkResultAccepted"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 4,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 5,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
           }
         }
       ]
@@ -11536,303 +12035,6 @@
       ]
     },
     {
-      "file": "simulation-finalizer-seed-0x36fbef9f.itf.json",
-      "kind": "simulation",
-      "seed": "0x36fbef9f",
-      "step": "finalizerStep",
-      "maxSteps": 25,
-      "invariant": "finalizerInvariant",
-      "states": 26,
-      "steps": [
-        {
-          "index": 0,
-          "action": "initFinalizing",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 1,
-          "action": "failureStandsEscalatedOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "FinalizationResultNotAllowed"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 2,
-          "action": "completeFinalizationOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationSucceeded"
-          },
-          "tickets": {
-            "1": "Done"
-          }
-        },
-        {
-          "index": 3,
-          "action": "strayFinalizationOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "FinalizationNotCurrent"
-          },
-          "tickets": {
-            "1": "Done"
-          }
-        },
-        {
-          "index": 4,
-          "action": "restartFinalizing",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 5,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 6,
-          "action": "failureStandsOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "FinalizationResultNotAllowed"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 7,
-          "action": "requestEvaluationOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationNeedsEvaluation"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 8,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TaskNotCurrent"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 9,
-          "action": "invalidateOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationWithdrawn"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 10,
-          "action": "unavailableFinalizationOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationUnavailable"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 11,
-          "action": "resumeOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationResumed"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 12,
-          "action": "requestEvaluationOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationNeedsEvaluation"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 13,
-          "action": "failEvaluatorOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationProgressed"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 14,
-          "action": "passEvaluatorOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationFailureReturned"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 15,
-          "action": "unavailableFinalizationOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationUnavailable"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 16,
-          "action": "revokeOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketRevoked"
-          },
-          "tickets": {
-            "1": "Revoked"
-          }
-        },
-        {
-          "index": 17,
-          "action": "restartFinalizing",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 18,
-          "action": "strayFinalizationOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationNeedsEvaluation"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 19,
-          "action": "unavailableEvaluatorOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationProgressed"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 20,
-          "action": "resumeOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotResumable"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 21,
-          "action": "invalidateFailedEvaluatorOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationFailureReturned"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 22,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 23,
-          "action": "failureStandsInvalidatedOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationFailureEscalated"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 24,
-          "action": "strayFinalizationOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "FinalizationNotCurrent"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 25,
-          "action": "resumeOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketWorkResumed"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        }
-      ]
-    },
-    {
       "file": "simulation-finalizer-seed-0x54021d70.itf.json",
       "kind": "simulation",
       "seed": "0x54021d70",
@@ -12130,9 +12332,9 @@
       ]
     },
     {
-      "file": "simulation-finalizer-seed-0xb9f45639.itf.json",
+      "file": "simulation-finalizer-seed-0x7d37a438.itf.json",
       "kind": "simulation",
-      "seed": "0xb9f45639",
+      "seed": "0x7d37a438",
       "step": "finalizerStep",
       "maxSteps": 25,
       "invariant": "finalizerInvariant",
@@ -12151,21 +12353,318 @@
         },
         {
           "index": 1,
-          "action": "reworkFinalizationOne",
+          "action": "failureStandsOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationResultNotAllowed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 2,
+          "action": "completeFinalizationOne",
           "decision": {
             "outcome": "decided",
-            "tag": "TicketFinalizationNeedsWork"
+            "tag": "TicketFinalizationSucceeded"
+          },
+          "tickets": {
+            "1": "Done"
+          }
+        },
+        {
+          "index": 3,
+          "action": "strayEvaluatorOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TaskNotCurrent"
+          },
+          "tickets": {
+            "1": "Done"
+          }
+        },
+        {
+          "index": 4,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Done"
+          }
+        },
+        {
+          "index": 5,
+          "action": "strayEvaluatorOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TaskNotCurrent"
+          },
+          "tickets": {
+            "1": "Done"
+          }
+        },
+        {
+          "index": 6,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Done"
+          }
+        },
+        {
+          "index": 7,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Done"
+          }
+        },
+        {
+          "index": 8,
+          "action": "restartFinalizing",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 9,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 10,
+          "action": "requestEvaluationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsEvaluation"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 11,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 12,
+          "action": "revokeOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketRevoked"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 13,
+          "action": "restartFinalizing",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 14,
+          "action": "strayEvaluatorOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TaskNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 15,
+          "action": "revokeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotRevocable"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 16,
+          "action": "requestEvaluationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsEvaluation"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 17,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationWithdrawn"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 18,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotResumable"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 19,
+          "action": "completeFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationResultNotAllowed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 20,
+          "action": "requestEvaluationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsEvaluation"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 21,
+          "action": "passEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 22,
+          "action": "invalidateFailedEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationFailureReturned"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 23,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationFailureReworked"
           },
           "tickets": {
             "1": "Work"
           }
         },
         {
-          "index": 2,
-          "action": "passWorkOne",
+          "index": 24,
+          "action": "revokeOne",
           "decision": {
             "outcome": "decided",
-            "tag": "TicketWorkResultAccepted"
+            "tag": "TicketRevoked"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 25,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        }
+      ]
+    },
+    {
+      "file": "simulation-finalizer-seed-0x7f9a3c08.itf.json",
+      "kind": "simulation",
+      "seed": "0x7f9a3c08",
+      "step": "finalizerStep",
+      "maxSteps": 25,
+      "invariant": "finalizerInvariant",
+      "states": 26,
+      "steps": [
+        {
+          "index": 0,
+          "action": "initFinalizing",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 1,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsEvaluation"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 2,
+          "action": "passEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
           },
           "tickets": {
             "1": "Evaluation"
@@ -12184,10 +12683,10 @@
         },
         {
           "index": 4,
-          "action": "passEvaluatorOne",
+          "action": "strayEvaluatorOne",
           "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationProgressed"
+            "outcome": "refused",
+            "tag": "TaskNotCurrent"
           },
           "tickets": {
             "1": "Evaluation"
@@ -12195,32 +12694,32 @@
         },
         {
           "index": 5,
-          "action": "strayInvalidateOne",
+          "action": "passEvaluatorOne",
           "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
+            "outcome": "decided",
+            "tag": "TicketEvaluationPassed"
           },
           "tickets": {
-            "1": "Evaluation"
+            "1": "Finalization"
           }
         },
         {
           "index": 6,
-          "action": "strayInvalidateOne",
+          "action": "reworkFinalizationOne",
           "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsWork"
           },
           "tickets": {
-            "1": "Evaluation"
+            "1": "Work"
           }
         },
         {
           "index": 7,
-          "action": "invalidateFailedEvaluatorOne",
+          "action": "strayEvaluatorOne",
           "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationFailureInvalidated"
+            "outcome": "refused",
+            "tag": "TaskNotCurrent"
           },
           "tickets": {
             "1": "Work"
@@ -12228,50 +12727,6 @@
         },
         {
           "index": 8,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 9,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 10,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TaskNotCurrent"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 11,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TaskNotCurrent"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 12,
           "action": "passWorkOne",
           "decision": {
             "outcome": "decided",
@@ -12282,73 +12737,7 @@
           }
         },
         {
-          "index": 13,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationProgressed"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 14,
-          "action": "passEvaluatorOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationBlocked"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 15,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TaskNotCurrent"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 16,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TaskNotCurrent"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 17,
-          "action": "resumeOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationResumed"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 18,
-          "action": "unavailableEvaluatorOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationBlocked"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 19,
+          "index": 9,
           "action": "revokeOne",
           "decision": {
             "outcome": "decided",
@@ -12359,36 +12748,146 @@
           }
         },
         {
-          "index": 20,
-          "action": "strayFinalizationOne",
+          "index": 10,
+          "action": "restartFinalizing",
           "decision": {
             "outcome": "refused",
-            "tag": "FinalizationNotCurrent"
+            "tag": "TicketNotFound"
           },
           "tickets": {
-            "1": "Revoked"
+            "1": "Finalization"
           }
         },
         {
-          "index": 21,
-          "action": "strayFinalizationOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "FinalizationNotCurrent"
-          },
-          "tickets": {
-            "1": "Revoked"
-          }
-        },
-        {
-          "index": 22,
+          "index": 11,
           "action": "strayEvaluatorOne",
           "decision": {
             "outcome": "refused",
             "tag": "TaskNotCurrent"
           },
           "tickets": {
-            "1": "Revoked"
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 12,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 13,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 14,
+          "action": "requestEvaluationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsEvaluation"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 15,
+          "action": "passEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 16,
+          "action": "failEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationFailureReturned"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 17,
+          "action": "unavailableFinalizationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationUnavailable"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 18,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationResumed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 19,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 20,
+          "action": "unavailableFinalizationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationUnavailable"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 21,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationResumed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 22,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
           }
         },
         {
@@ -12399,29 +12898,326 @@
             "tag": "FinalizationNotCurrent"
           },
           "tickets": {
-            "1": "Revoked"
+            "1": "Finalization"
           }
         },
         {
           "index": 24,
+          "action": "failureStandsEscalatedOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationFailureEscalated"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 25,
+          "action": "strayEvaluatorOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TaskNotCurrent"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        }
+      ]
+    },
+    {
+      "file": "simulation-finalizer-seed-0x99c008a8.itf.json",
+      "kind": "simulation",
+      "seed": "0x99c008a8",
+      "step": "finalizerStep",
+      "maxSteps": 25,
+      "invariant": "finalizerInvariant",
+      "states": 26,
+      "steps": [
+        {
+          "index": 0,
+          "action": "initFinalizing",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 1,
+          "action": "failureStandsEscalatedOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationResultNotAllowed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 2,
+          "action": "failureStandsOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationResultNotAllowed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 3,
+          "action": "requestEvaluationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsEvaluation"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 4,
+          "action": "unavailableEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 5,
+          "action": "passEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationBlocked"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 6,
           "action": "strayFinalizationOne",
           "decision": {
             "outcome": "refused",
             "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 7,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 8,
+          "action": "invalidateOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationWithdrawn"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 9,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotResumable"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 10,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationResultNotAllowed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 11,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationResultNotAllowed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 12,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 13,
+          "action": "failureStandsInvalidatedOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationResultNotAllowed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 14,
+          "action": "failureStandsEscalatedOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationResultNotAllowed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 15,
+          "action": "unavailableFinalizationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationUnavailable"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 16,
+          "action": "revokeOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketRevoked"
           },
           "tickets": {
             "1": "Revoked"
           }
         },
         {
-          "index": 25,
-          "action": "strayFinalizationOne",
+          "index": 17,
+          "action": "strayEvaluatorOne",
           "decision": {
             "outcome": "refused",
-            "tag": "FinalizationNotCurrent"
+            "tag": "TaskNotCurrent"
           },
           "tickets": {
             "1": "Revoked"
+          }
+        },
+        {
+          "index": 18,
+          "action": "restartFinalizing",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 19,
+          "action": "completeFinalizationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationSucceeded"
+          },
+          "tickets": {
+            "1": "Done"
+          }
+        },
+        {
+          "index": 20,
+          "action": "strayEvaluatorOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TaskNotCurrent"
+          },
+          "tickets": {
+            "1": "Done"
+          }
+        },
+        {
+          "index": 21,
+          "action": "restartFinalizing",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 22,
+          "action": "revokeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotRevocable"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 23,
+          "action": "reworkFinalizationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsWork"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 24,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 25,
+          "action": "failWorkOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketWorkProcessFailed"
+          },
+          "tickets": {
+            "1": "Escalated"
           }
         }
       ]
@@ -12724,9 +13520,9 @@
       ]
     },
     {
-      "file": "simulation-finalizer-seed-0xea33f0b4.itf.json",
+      "file": "simulation-finalizer-seed-0xda0af00d.itf.json",
       "kind": "simulation",
-      "seed": "0xea33f0b4",
+      "seed": "0xda0af00d",
       "step": "finalizerStep",
       "maxSteps": 25,
       "invariant": "finalizerInvariant",
@@ -12745,556 +13541,6 @@
         },
         {
           "index": 1,
-          "action": "failureStandsOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "FinalizationResultNotAllowed"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 2,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 3,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 4,
-          "action": "revokeOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotRevocable"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 5,
-          "action": "resumeOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotResumable"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 6,
-          "action": "strayFinalizationOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "FinalizationNotCurrent"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 7,
-          "action": "requestEvaluationOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationNeedsEvaluation"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 8,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationProgressed"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 9,
-          "action": "passEvaluatorOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationFailureReturned"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 10,
-          "action": "failureStandsEscalatedOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationFailureEscalated"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 11,
-          "action": "resumeOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketWorkResumed"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 12,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 13,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 14,
-          "action": "failWorkOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketWorkProcessFailed"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 15,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TaskNotCurrent"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 16,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 17,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TaskNotCurrent"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 18,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TaskNotCurrent"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 19,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 20,
-          "action": "resumeOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketWorkResumed"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 21,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 22,
-          "action": "revokeOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketRevoked"
-          },
-          "tickets": {
-            "1": "Revoked"
-          }
-        },
-        {
-          "index": 23,
-          "action": "strayFinalizationOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "FinalizationNotCurrent"
-          },
-          "tickets": {
-            "1": "Revoked"
-          }
-        },
-        {
-          "index": 24,
-          "action": "restartFinalizing",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 25,
-          "action": "requestEvaluationOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationNeedsEvaluation"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        }
-      ]
-    },
-    {
-      "file": "simulation-finalizer-seed-0xfa8cfc2d.itf.json",
-      "kind": "simulation",
-      "seed": "0xfa8cfc2d",
-      "step": "finalizerStep",
-      "maxSteps": 25,
-      "invariant": "finalizerInvariant",
-      "states": 26,
-      "steps": [
-        {
-          "index": 0,
-          "action": "initFinalizing",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 1,
-          "action": "requestEvaluationOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationNeedsEvaluation"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 2,
-          "action": "passEvaluatorOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationProgressed"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 3,
-          "action": "invalidateFailedEvaluatorOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationFailureReturned"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 4,
-          "action": "revokeOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketRevoked"
-          },
-          "tickets": {
-            "1": "Revoked"
-          }
-        },
-        {
-          "index": 5,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TaskNotCurrent"
-          },
-          "tickets": {
-            "1": "Revoked"
-          }
-        },
-        {
-          "index": 6,
-          "action": "restartFinalizing",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 7,
-          "action": "revokeOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotRevocable"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 8,
-          "action": "revokeOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotRevocable"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 9,
-          "action": "revokeOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotRevocable"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 10,
-          "action": "unavailableFinalizationOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationUnavailable"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 11,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 12,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TaskNotCurrent"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 13,
-          "action": "resumeOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationResumed"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 14,
-          "action": "reworkFinalizationOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketFinalizationNeedsWork"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 15,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TaskNotCurrent"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 16,
-          "action": "failWorkOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketWorkProcessFailed"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 17,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 18,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 19,
-          "action": "revokeOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketRevoked"
-          },
-          "tickets": {
-            "1": "Revoked"
-          }
-        },
-        {
-          "index": 20,
-          "action": "restartFinalizing",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotFound"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 21,
-          "action": "strayFinalizationOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "FinalizationNotCurrent"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 22,
-          "action": "resumeOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotResumable"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 23,
-          "action": "failureStandsEscalatedOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "FinalizationResultNotAllowed"
-          },
-          "tickets": {
-            "1": "Finalization"
-          }
-        },
-        {
-          "index": 24,
           "action": "failureStandsInvalidatedOne",
           "decision": {
             "outcome": "refused",
@@ -13305,7 +13551,227 @@
           }
         },
         {
-          "index": 25,
+          "index": 2,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 3,
+          "action": "strayEvaluatorOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TaskNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 4,
+          "action": "reworkFinalizationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsWork"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 5,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 6,
+          "action": "passWorkOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketWorkResultAccepted"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 7,
+          "action": "invalidateOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationInvalidated"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 8,
+          "action": "failWorkOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketWorkProcessFailed"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 9,
+          "action": "revokeOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketRevoked"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 10,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 11,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 12,
+          "action": "strayEvaluatorOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TaskNotCurrent"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 13,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 14,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 15,
+          "action": "strayEvaluatorOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TaskNotCurrent"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 16,
+          "action": "restartFinalizing",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 17,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 18,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 19,
+          "action": "requestEvaluationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsEvaluation"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 20,
+          "action": "strayEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 21,
+          "action": "invalidateFailedEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationFailureReturned"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 22,
           "action": "unavailableFinalizationOne",
           "decision": {
             "outcome": "decided",
@@ -13314,13 +13780,46 @@
           "tickets": {
             "1": "Escalated"
           }
+        },
+        {
+          "index": 23,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationResumed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 24,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 25,
+          "action": "failureStandsEscalatedOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationFailureEscalated"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
         }
       ]
     },
     {
-      "file": "simulation-finalizer-seed-0xfd1f9ecf.itf.json",
+      "file": "simulation-finalizer-seed-0xe25e5511.itf.json",
       "kind": "simulation",
-      "seed": "0xfd1f9ecf",
+      "seed": "0xe25e5511",
       "step": "finalizerStep",
       "maxSteps": 25,
       "invariant": "finalizerInvariant",
@@ -13339,7 +13838,304 @@
         },
         {
           "index": 1,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 2,
+          "action": "failureStandsEscalatedOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationResultNotAllowed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 3,
+          "action": "reworkFinalizationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsWork"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 4,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 5,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotResumable"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 6,
+          "action": "passWorkOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketWorkResultAccepted"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 7,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotResumable"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 8,
+          "action": "strayEvaluatorOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TaskNotCurrent"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 9,
+          "action": "invalidateOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationInvalidated"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 10,
+          "action": "strayEvaluatorOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TaskNotCurrent"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 11,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 12,
+          "action": "passWorkOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketWorkResultAccepted"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 13,
+          "action": "strayEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 14,
+          "action": "passEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationReworkStarted"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 15,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 16,
+          "action": "revokeOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketRevoked"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 17,
+          "action": "restartFinalizing",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 18,
           "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 19,
+          "action": "requestEvaluationOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsEvaluation"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 20,
+          "action": "unavailableEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 21,
+          "action": "passEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationBlocked"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 22,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationResumed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 23,
+          "action": "revokeOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketRevoked"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 24,
+          "action": "strayEvaluatorOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TaskNotCurrent"
+          },
+          "tickets": {
+            "1": "Revoked"
+          }
+        },
+        {
+          "index": 25,
+          "action": "restartFinalizing",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        }
+      ]
+    },
+    {
+      "file": "simulation-finalizer-seed-0xfd4fa9a1.itf.json",
+      "kind": "simulation",
+      "seed": "0xfd4fa9a1",
+      "step": "finalizerStep",
+      "maxSteps": 25,
+      "invariant": "finalizerInvariant",
+      "states": 26,
+      "steps": [
+        {
+          "index": 0,
+          "action": "initFinalizing",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 1,
+          "action": "failureStandsInvalidatedOne",
           "decision": {
             "outcome": "refused",
             "tag": "FinalizationResultNotAllowed"
@@ -13361,61 +14157,6 @@
         },
         {
           "index": 3,
-          "action": "failWorkOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketWorkProcessFailed"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 4,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TaskNotCurrent"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 5,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 6,
-          "action": "resumeOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketWorkResumed"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 7,
-          "action": "strayInvalidateOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "EvaluationNotCurrent"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 8,
           "action": "passWorkOne",
           "decision": {
             "outcome": "decided",
@@ -13426,7 +14167,18 @@
           }
         },
         {
-          "index": 9,
+          "index": 4,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 5,
           "action": "invalidateFailedEvaluatorOne",
           "decision": {
             "outcome": "decided",
@@ -13437,8 +14189,30 @@
           }
         },
         {
-          "index": 10,
-          "action": "failEvaluatorOne",
+          "index": 6,
+          "action": "strayFinalizationOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "FinalizationNotCurrent"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 7,
+          "action": "strayInvalidateOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "EvaluationNotCurrent"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 8,
+          "action": "passEvaluatorOne",
           "decision": {
             "outcome": "decided",
             "tag": "TicketEvaluationReworkStarted"
@@ -13448,44 +14222,66 @@
           }
         },
         {
-          "index": 11,
+          "index": 9,
+          "action": "passWorkOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketWorkResultAccepted"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 10,
           "action": "strayFinalizationOne",
           "decision": {
             "outcome": "refused",
             "tag": "FinalizationNotCurrent"
           },
           "tickets": {
-            "1": "Work"
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 11,
+          "action": "passEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
           }
         },
         {
           "index": 12,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TaskNotCurrent"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 13,
-          "action": "strayEvaluatorOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "TaskNotCurrent"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 14,
           "action": "resumeOne",
           "decision": {
             "outcome": "refused",
             "tag": "TicketNotResumable"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 13,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotResumable"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 14,
+          "action": "invalidateFailedEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationFailureInvalidated"
           },
           "tickets": {
             "1": "Work"
@@ -13515,10 +14311,10 @@
         },
         {
           "index": 17,
-          "action": "strayEvaluatorOne",
+          "action": "passEvaluatorOne",
           "decision": {
-            "outcome": "refused",
-            "tag": "TaskNotCurrent"
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
           },
           "tickets": {
             "1": "Evaluation"
@@ -13537,61 +14333,17 @@
         },
         {
           "index": 19,
-          "action": "resumeOne",
+          "action": "failEvaluatorOne",
           "decision": {
-            "outcome": "refused",
-            "tag": "TicketNotResumable"
+            "outcome": "decided",
+            "tag": "TicketEvaluationReworkStarted"
           },
           "tickets": {
-            "1": "Evaluation"
+            "1": "Work"
           }
         },
         {
           "index": 20,
-          "action": "passEvaluatorOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationProgressed"
-          },
-          "tickets": {
-            "1": "Evaluation"
-          }
-        },
-        {
-          "index": 21,
-          "action": "unavailableEvaluatorOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationBlocked"
-          },
-          "tickets": {
-            "1": "Escalated"
-          }
-        },
-        {
-          "index": 22,
-          "action": "invalidateOne",
-          "decision": {
-            "outcome": "decided",
-            "tag": "TicketEvaluationInvalidated"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 23,
-          "action": "strayFinalizationOne",
-          "decision": {
-            "outcome": "refused",
-            "tag": "FinalizationNotCurrent"
-          },
-          "tickets": {
-            "1": "Work"
-          }
-        },
-        {
-          "index": 24,
           "action": "passWorkOne",
           "decision": {
             "outcome": "decided",
@@ -13602,7 +14354,18 @@
           }
         },
         {
-          "index": 25,
+          "index": 21,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotResumable"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 22,
           "action": "passEvaluatorOne",
           "decision": {
             "outcome": "decided",
@@ -13610,6 +14373,39 @@
           },
           "tickets": {
             "1": "Evaluation"
+          }
+        },
+        {
+          "index": 23,
+          "action": "passEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 24,
+          "action": "resumeOne",
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotResumable"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 25,
+          "action": "failEvaluatorOne",
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationReworkStarted"
+          },
+          "tickets": {
+            "1": "Work"
           }
         }
       ]

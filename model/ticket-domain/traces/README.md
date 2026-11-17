@@ -108,13 +108,14 @@ runs of steps, so candidates are spread over the seed space.
 | `step` | `0x3ba36b82` | Escalated, Evaluation, Pending, Revoked, Work | 13 |
 | `step` | `0x7d8562c7` | Evaluation, Pending, Work | 13 |
 | `step` | `0x96af9ca5` | Escalated, Evaluation, Pending, Work | 13 |
-| `finalizerStep` | `0x36fbef9f` | Done, Escalated, Evaluation, Finalization, Revoked, Work | 17 |
 | `finalizerStep` | `0x54021d70` | Escalated, Evaluation, Finalization, Revoked, Work | 14 |
-| `finalizerStep` | `0xb9f45639` | Escalated, Evaluation, Finalization, Revoked, Work | 10 |
+| `finalizerStep` | `0x7d37a438` | Done, Evaluation, Finalization, Revoked, Work | 11 |
+| `finalizerStep` | `0x7f9a3c08` | Escalated, Evaluation, Finalization, Revoked, Work | 13 |
+| `finalizerStep` | `0x99c008a8` | Done, Escalated, Evaluation, Finalization, Revoked, Work | 17 |
 | `finalizerStep` | `0xbe1e08bb` | Done, Evaluation, Finalization, Revoked | 11 |
-| `finalizerStep` | `0xea33f0b4` | Escalated, Evaluation, Finalization, Revoked, Work | 11 |
-| `finalizerStep` | `0xfa8cfc2d` | Escalated, Evaluation, Finalization, Revoked, Work | 14 |
-| `finalizerStep` | `0xfd1f9ecf` | Escalated, Evaluation, Finalization, Work | 12 |
+| `finalizerStep` | `0xda0af00d` | Escalated, Evaluation, Finalization, Revoked, Work | 15 |
+| `finalizerStep` | `0xe25e5511` | Escalated, Evaluation, Finalization, Revoked, Work | 13 |
+| `finalizerStep` | `0xfd4fa9a1` | Evaluation, Finalization, Work | 10 |
 
 The `executionRequirementsPreserved` scenario records distinct work and
 evaluator execution-requirement references through a pending revision,

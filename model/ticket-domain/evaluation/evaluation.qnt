@@ -488,14 +488,15 @@ module evaluation_protocol {
       })
     })
 
-  // Round 1 is the one a work result opens, and every later round was
-  // requested.
+  // Round 1 is the one a work result opens. Every later round was requested
+  // by an operation of the round before it, and an operation's generation is
+  // never below its round.
   pure def originValid(current: EvaluationInstance): bool =
     match current.origin {
       | OpenedByWork => current.round == 1
       | Requested(request) =>
           current.round > 1
-          and request.generation > 0
+          and request.generation >= current.round - 1
           and request.evidence > 0
     }
 

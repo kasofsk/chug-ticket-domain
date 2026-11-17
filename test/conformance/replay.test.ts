@@ -78,20 +78,20 @@ for (const trace of traces)
     });
   });
 test("corpus has complete decision coverage", () => {
-  expect(traces).toHaveLength(77);
-  expect(summaries.filter((s) => s.kind === "simulation")).toHaveLength(11);
+  expect(traces).toHaveLength(81);
+  expect(summaries.filter((s) => s.kind === "simulation")).toHaveLength(12);
   expect(
     summaries
       .filter((s) => s.kind === "simulation")
       .reduce((n, s) => n + s.checks, 0),
-  ).toBe(266);
+  ).toBe(288);
   expect(
     summaries
       .filter((s) => s.kind === "scenario")
       .reduce((n, s) => n + s.checks, 0),
-  ).toBe(719);
-  expect(summaries.flatMap((s) => s.evolve)).toHaveLength(98);
-  expect(summaries.reduce((n, s) => n + s.restarts, 0)).toBe(9);
+  ).toBe(756);
+  expect(summaries.flatMap((s) => s.evolve)).toHaveLength(101);
+  expect(summaries.reduce((n, s) => n + s.restarts, 0)).toBe(12);
   expect(
     summaries.filter((s) => s.kind === "simulation").flatMap((s) => s.evolve),
   ).toEqual([]);

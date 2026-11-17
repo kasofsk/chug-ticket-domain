@@ -2,7 +2,7 @@
 
 The ticket model is the specification of record for release, dispatch, work cycles, embedded evaluation, rework, escalation, finalization, dependencies, revocation, decisions, events, and obligations. `ticket.qnt` is checked by `ticket_tests.qnt` and transcribed into the TypeScript core.
 
-A released ticket pins one opaque immutable content reference, an input-bindings reference, the work task definition, evaluation plan, finalization configuration, and same-project dependencies. The referenced content retains its exact authored or historical shape. The application interprets it when preparing task context; the domain does not invent missing fields.
+A released ticket pins one opaque immutable content reference, the work task definition, evaluation plan, finalization configuration, and same-project dependencies. The referenced content retains its exact authored or historical shape. The application interprets it when preparing task context; the domain does not invent missing fields.
 
 Dispatch accepts an opaque immutable source reference after the application validates source policy. A work obligation contains the work task identity, pinned definition, and a single context reference scoped by `(ticket, cycle)`. The application commits the immutable context bundle under that identity with the accepted decision. Structured `WorkInput` retains the released content reference, rework causes, and retry evidence so the bundle can be recreated and checked without relying on mutable configuration.
 

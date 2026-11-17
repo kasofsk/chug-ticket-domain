@@ -2007,10 +2007,10 @@ function _finalization_origin_valid(o: FinalizationOperation): boolean {
   const origin = o.origin;
   return origin instanceof Requested
     ? o.round > 1 &&
-        origin.generation > 0 &&
+        origin.generation >= o.round - 1 &&
         origin.generation < o.generation &&
         origin.evidence > 0
-    : o.round === 1;
+    : o.round === 1 && o.generation > 0;
 }
 function _finalization_operation_valid(
   t: Ticket,
@@ -2018,8 +2018,6 @@ function _finalization_operation_valid(
 ): boolean {
   return (
     o.work_cycle === t.work_cycles_started &&
-    o.round > 0 &&
-    o.generation >= o.round &&
     o.input > 0 &&
     o.source > 0 &&
     _finalization_origin_valid(o) &&

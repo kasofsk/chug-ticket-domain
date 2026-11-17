@@ -10,10 +10,10 @@ values, and `replay.test.ts` checks their decisions and transitions.
 `path`) and `load_traces()` decodes the directory, both failing loudly rather
 than decode something they do not understand:
 
-- `#bigint` becomes a safe integer only from a strict decimal string; a record becomes
-  `Record<string, Value>`; `#set` becomes `ReadonlySet`; `#map` becomes `ReadonlyMap`; both
-  `#tup` and a plain JSON array become readonly arrays; `{"tag": …, "value": …}`
-  becomes the frozen `Variant`, so a nullary variant is `new Variant(tag, [])`.
+- `#bigint` becomes a safe integer only from a strict decimal string; a record
+  becomes a plain object; `#set` becomes a `Set`; `#map` becomes a `Map`; both
+  `#tup` and a plain JSON array become arrays; `{"tag": …, "value": …}` becomes
+  a `Variant`, so a nullary variant is `new Variant(tag, [])`.
 - No `#bigint`, `#map`, `#set` or `#tup` object survives decoding; an unknown
   `#`-marker, a float, a null, a bare tag, or a marker object carrying extra
   keys raises `ItfError`.
@@ -21,19 +21,18 @@ than decode something they do not understand:
   equals its position, and `#meta.kind` agrees with the presence of the two
   `mbt::` variables. Duplicate `vars` names (Quint 0.32.0 lists each `mbt::`
   name twice) are removed, first occurrence kept.
-- Decoded values are immutable and compare by content, so two states compare
-  with `==`, and sets and maps never compare by the order the file lists them.
+- Decoded values compare by content with `equal` from `src/task.ts`, never
+  with `===`, so sets and maps do not compare by the order the file lists
+  them.
 
 Two shapes exist: a scenario over `graph`, `lastDecision` and `priorGraph`, and
 a simulation adding the two `mbt::` variables.
 
 ## Map keys
 
-A decoded record or map is a `ReadonlyMap` and cannot be a key, so every `#map` key is
-frozen: a record or map key becomes a `FrozenMapping` of its pairs sorted by
-the `repr` of the key (`.as_dict()` gives the record back), a list key becomes
-a readonly arrays, everything else is already hashable and is used as it is. Every key
-in the traces is a `#bigint`, so `graph["tickets"]` is keyed by a safe integer ids.
+A `#map` key is decoded like any other value, and two keys that are `equal`
+raise `ItfError`. Every key in the traces is a `#bigint`, so `graph.tickets` is
+keyed by safe integers.
 
 ## How replay consumes this
 
@@ -41,10 +40,12 @@ in the traces is a `#bigint`, so `graph["tickets"]` is keyed by a safe integer i
 `nondet_picks`) for every state after `init`, one per step the model took.
 `decisions(trace)` yields the same minus a state whose `lastDecision` equals
 its predecessor's — a `check(...)` re-emitting the previous decision, not a
-second decision. For each yielded step, replay calls `decide` on the *previous*
-state's `graph` and compares with `decision`, then `evolve`s and compares with
-this state's `graph`; `priorGraph` is the model's own copy of the input state
-and checks that pairing again. Things it must not get wrong:
+second decision. For each yielded step, replay reads the step's own state: it
+calls `decide` on that state's `priorGraph`, the model's copy of the graph the
+decision was taken on, and compares with `lastDecision`, then `evolve`s and
+compares with that state's `graph`. It does not compare `priorGraph` with the
+state before, which differs from it on a `check(...)` step and when the
+finalizer's walk starts again. Things it must not get wrong:
 
 - The first step is always yielded, even when it equals `NO_DECISION`, the
   `init` sentinel `TicketRefused(TicketNotFound(0))`. A scenario asserting
@@ -92,15 +93,14 @@ them, because all of them must decide it.
 
 A rebuilt `stray…` command is only as checked as its decision depends on it: a
 refusal names the address and nothing else. So `replay.test.ts` requires the
-corpus to hold the situations where it does depend on it
-(`REQUIRED_FEATURES` in `replay.ts`): a stray evaluator result and a stray
-evaluator failure that are accepted, a stray report with each result it can
-carry addressed to the current operation, a stray invalidation that is
-accepted, each of them refused while its target is live, a report for another
-work cycle at the current generation, and each non-rework policy meeting a
-failure that stands. The simulation seeds in `export_traces.ts` are chosen to hold
-them; a change to the walk that loses one fails the suite until seeds that
-hold it are chosen again.
+simulation traces to hold the situations `REQUIRED_FEATURES` in `replay.ts`
+lists: every value a stray step can pick, and those where the decision depends
+on something replay rebuilt (a payload that is judged, an address read from a
+state where a wrong reading differs, such as an operation whose generation is
+not its round or a blocked requested round, or the policy in force). The simulation seeds in `export_traces.ts` are
+chosen to hold them; a change to the walk that loses one fails the suite until
+seeds that hold it are chosen again. A part of the harness no trace exercises
+is checked by nothing.
 
 **Evolve-only** is a step whose command the trace does not determine: the four
 state assertions still run, only `decide` is out of reach. Some scenario steps
