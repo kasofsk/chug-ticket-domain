@@ -7,6 +7,8 @@ import {
   EvaluationPlan,
   EvaluationReworkEntry,
   EvaluationVerdict,
+  OpenedByWork,
+  Requested,
   Running,
   apply_produced,
   apply_failure,
@@ -24,6 +26,7 @@ import {
   ContextRef,
   CycleNumber,
   Generation,
+  Round,
   TaskDefinition,
   TaskId,
   TaskObligation,
@@ -61,15 +64,15 @@ export class FinalizationRework {
   }
 }
 
-export class StackInvalidated {
-  readonly kind = "StackInvalidated";
+export class EvaluationInvalidated {
+  readonly kind = "EvaluationInvalidated";
   constructor(readonly evidence: ContentRef) {
     Object.freeze(this);
   }
 }
 
 export type WorkCause =
-  InitialWork | EvaluationRework | FinalizationRework | StackInvalidated;
+  InitialWork | EvaluationRework | FinalizationRework | EvaluationInvalidated;
 
 export class WorkInput {
   readonly kind = "WorkInput";
@@ -94,13 +97,39 @@ export class WorkExecution {
   }
 }
 
+export class PassedVerdict {
+  readonly kind = "PassedVerdict";
+  constructor() {
+    Object.freeze(this);
+  }
+}
+
+export class FailedVerdict {
+  readonly kind = "FailedVerdict";
+  constructor(readonly evaluation: EvaluationInstance) {
+    Object.freeze(this);
+  }
+}
+
+export class WithdrawnVerdict {
+  readonly kind = "WithdrawnVerdict";
+  constructor(readonly evidence: ContentRef) {
+    Object.freeze(this);
+  }
+}
+
+export type FinalizationBasis =
+  PassedVerdict | FailedVerdict | WithdrawnVerdict;
+
 export class FinalizationOperation {
   readonly kind = "FinalizationOperation";
   constructor(
     readonly work_cycle: CycleNumber,
+    readonly round: Round,
     readonly generation: Generation,
     readonly input: ContentRef,
     readonly source: ContentRef,
+    readonly basis: FinalizationBasis,
   ) {
     Object.freeze(this);
   }
@@ -395,8 +424,26 @@ export class FinalizationResultUnavailable {
   }
 }
 
+export class FinalizationNeedsEvaluation {
+  readonly kind = "FinalizationNeedsEvaluation";
+  constructor(readonly evidence: ContentRef) {
+    Object.freeze(this);
+  }
+}
+
+export class FinalizationFailureStands {
+  readonly kind = "FinalizationFailureStands";
+  constructor(readonly evidence: ContentRef) {
+    Object.freeze(this);
+  }
+}
+
 export type FinalizationResult =
-  FinalizationSucceeded | FinalizationNeedsWork | FinalizationResultUnavailable;
+  | FinalizationSucceeded
+  | FinalizationNeedsWork
+  | FinalizationResultUnavailable
+  | FinalizationNeedsEvaluation
+  | FinalizationFailureStands;
 
 export class FinalizationResultReport {
   readonly kind = "FinalizationResultReport";
@@ -457,6 +504,7 @@ export class InvalidateEvaluation {
   constructor(
     readonly ticket: TicketId,
     readonly work_cycle: CycleNumber,
+    readonly round: Round,
     readonly evidence: ContentRef,
   ) {
     Object.freeze(this);
@@ -608,11 +656,23 @@ export class FinalizationNotCurrent {
   }
 }
 
+export class FinalizationResultNotAllowed {
+  readonly kind = "FinalizationResultNotAllowed";
+  constructor(
+    readonly ticket: TicketId,
+    readonly work_cycle: CycleNumber,
+    readonly generation: Generation,
+  ) {
+    Object.freeze(this);
+  }
+}
+
 export class EvaluationNotCurrent {
   readonly kind = "EvaluationNotCurrent";
   constructor(
     readonly ticket: TicketId,
     readonly work_cycle: CycleNumber,
+    readonly round: Round,
   ) {
     Object.freeze(this);
   }
@@ -633,6 +693,7 @@ export type TicketRefusal =
   | TicketNotResumable
   | TaskNotCurrent
   | FinalizationNotCurrent
+  | FinalizationResultNotAllowed
   | EvaluationNotCurrent;
 
 export class TicketCreated {
@@ -802,6 +863,77 @@ export class TicketEvaluationBlocked {
   }
 }
 
+export class TicketEvaluationFailureReturned {
+  readonly kind = "TicketEvaluationFailureReturned";
+  constructor(
+    readonly ticket: TicketId,
+    readonly report: TaskTerminalReport,
+  ) {
+    Object.freeze(this);
+  }
+}
+
+export class TicketEvaluationWithdrawn {
+  readonly kind = "TicketEvaluationWithdrawn";
+  constructor(
+    readonly ticket: TicketId,
+    readonly work_cycle: CycleNumber,
+    readonly round: Round,
+    readonly evidence: ContentRef,
+  ) {
+    Object.freeze(this);
+  }
+}
+
+export class TicketFinalizationNeedsEvaluation {
+  readonly kind = "TicketFinalizationNeedsEvaluation";
+  constructor(
+    readonly ticket: TicketId,
+    readonly work_cycle: CycleNumber,
+    readonly generation: Generation,
+    readonly evidence: ContentRef,
+  ) {
+    Object.freeze(this);
+  }
+}
+
+export class TicketFinalizationFailureReworked {
+  readonly kind = "TicketFinalizationFailureReworked";
+  constructor(
+    readonly ticket: TicketId,
+    readonly work_cycle: CycleNumber,
+    readonly generation: Generation,
+    readonly evidence: ContentRef,
+  ) {
+    Object.freeze(this);
+  }
+}
+
+export class TicketFinalizationFailureEscalated {
+  readonly kind = "TicketFinalizationFailureEscalated";
+  constructor(
+    readonly ticket: TicketId,
+    readonly work_cycle: CycleNumber,
+    readonly generation: Generation,
+    readonly evidence: ContentRef,
+  ) {
+    Object.freeze(this);
+  }
+}
+
+export class TicketFinalizationFailureInvalidated {
+  readonly kind = "TicketFinalizationFailureInvalidated";
+  constructor(
+    readonly ticket: TicketId,
+    readonly work_cycle: CycleNumber,
+    readonly generation: Generation,
+    readonly evidence: ContentRef,
+    readonly invalidation: ContentRef,
+  ) {
+    Object.freeze(this);
+  }
+}
+
 export class TicketFinalizationSucceeded {
   readonly kind = "TicketFinalizationSucceeded";
   constructor(
@@ -856,9 +988,15 @@ export type TicketEvent =
   | TicketEvaluationInvalidated
   | TicketEvaluationFailureInvalidated
   | TicketEvaluationBlocked
+  | TicketEvaluationFailureReturned
+  | TicketEvaluationWithdrawn
   | TicketFinalizationSucceeded
   | TicketFinalizationNeedsWork
-  | TicketFinalizationUnavailable;
+  | TicketFinalizationUnavailable
+  | TicketFinalizationNeedsEvaluation
+  | TicketFinalizationFailureReworked
+  | TicketFinalizationFailureEscalated
+  | TicketFinalizationFailureInvalidated;
 
 export class ExecuteTask {
   readonly kind = "ExecuteTask";
@@ -972,6 +1110,7 @@ export function validate_command(c: TicketCommand): void {
   } else if (c instanceof InvalidateEvaluation) {
     pos(c.ticket, "invalidated ticket must be present");
     pos(c.work_cycle, "invalidated work cycle must be present");
+    pos(c.round, "invalidated round must be present");
     pos(c.evidence, "invalidation evidence must be present");
   } else if (c instanceof ReportTaskTerminal) {
     const report = c.report;
@@ -1024,7 +1163,7 @@ export function invalidated_work_input(
   d: ReleasedTicket,
   e: ContentRef,
 ): WorkInput {
-  return new WorkInput(d.content, new StackInvalidated(e), []);
+  return new WorkInput(d.content, new EvaluationInvalidated(e), []);
 }
 export function finalization_rework_input(
   d: ReleasedTicket,
@@ -1057,10 +1196,49 @@ export function resumed_finalization(
 ): FinalizationOperation {
   return new FinalizationOperation(
     o.work_cycle,
+    o.round,
     Generation(o.generation + 1),
     o.input,
     o.source,
+    o.basis,
   );
+}
+export function evaluation_requested(e: EvaluationInstance): boolean {
+  return e.origin instanceof Requested;
+}
+export function finalization_after(
+  e: EvaluationInstance,
+  basis: FinalizationBasis,
+): FinalizationOperation {
+  return new FinalizationOperation(
+    e.work_cycle,
+    e.round,
+    Generation(e.origin instanceof Requested ? e.origin.generation + 1 : 1),
+    e.input.work_result,
+    e.input.accepted_source_ref,
+    basis,
+  );
+}
+export function requested_evaluation(
+  t: Ticket,
+  o: FinalizationOperation,
+  evidence: ContentRef,
+): EvaluationInstance {
+  return begin(
+    o.work_cycle,
+    Round(o.round + 1),
+    new Requested(o.generation, evidence),
+    new EvaluationInput(t.definition.id, o.input, o.source),
+    t.definition.evaluation_plan,
+  );
+}
+export function failed_basis_entries(
+  basis: FinalizationBasis,
+): readonly EvaluationReworkEntry[] {
+  return basis instanceof FailedVerdict &&
+    basis.evaluation.state instanceof EvaluationFailed
+    ? rework_entries(basis.evaluation, basis.evaluation.state.completed_stages)
+    : [];
 }
 export function execute_evaluation_tasks(
   id: TicketId,
@@ -1202,8 +1380,23 @@ export function decide(
   }
   if (c instanceof InvalidateEvaluation) {
     const evaluation = invalidatable_evaluation(t.state);
-    if (!evaluation || evaluation.work_cycle !== c.work_cycle)
-      return refuse(new EvaluationNotCurrent(id, c.work_cycle));
+    if (
+      !evaluation ||
+      evaluation.work_cycle !== c.work_cycle ||
+      evaluation.round !== c.round
+    )
+      return refuse(new EvaluationNotCurrent(id, c.work_cycle, c.round));
+    if (evaluation_requested(evaluation))
+      return decided(
+        new TicketEvaluationWithdrawn(id, c.work_cycle, c.round, c.evidence),
+        [
+          ...cancel_live_tasks(t),
+          finalize(
+            t,
+            finalization_after(evaluation, new WithdrawnVerdict(c.evidence)),
+          ),
+        ],
+      );
     return decided(
       new TicketEvaluationInvalidated(id, c.work_cycle, c.evidence),
       [
@@ -1263,6 +1456,78 @@ export function decide(
     )
       return refuse(new FinalizationNotCurrent(id, r.work_cycle, r.generation));
     const evidence = r.result.evidence;
+    const operation = t.state.operation;
+    const not_allowed = refuse(
+      new FinalizationResultNotAllowed(id, r.work_cycle, r.generation),
+    );
+    if (r.result instanceof FinalizationNeedsEvaluation)
+      return decided(
+        new TicketFinalizationNeedsEvaluation(
+          id,
+          r.work_cycle,
+          r.generation,
+          evidence,
+        ),
+        execute_evaluation_tasks(
+          id,
+          requested_evaluation(t, operation, evidence),
+        ),
+      );
+    if (r.result instanceof FinalizationFailureStands) {
+      if (!(operation.basis instanceof FailedVerdict)) return not_allowed;
+      const disposition = policy(operation.basis.evaluation);
+      if (disposition instanceof EscalateEvaluationFailure)
+        return decided(
+          new TicketFinalizationFailureEscalated(
+            id,
+            r.work_cycle,
+            r.generation,
+            evidence,
+          ),
+        );
+      return disposition instanceof ReworkEvaluationFailure
+        ? decided(
+            new TicketFinalizationFailureReworked(
+              id,
+              r.work_cycle,
+              r.generation,
+              evidence,
+            ),
+            [
+              execute_work(
+                t,
+                next_cycle_number(t),
+                operation.source,
+                evaluation_rework_input(
+                  t.definition,
+                  failed_basis_entries(operation.basis),
+                ),
+              ),
+            ],
+          )
+        : decided(
+            new TicketFinalizationFailureInvalidated(
+              id,
+              r.work_cycle,
+              r.generation,
+              evidence,
+              disposition.evidence,
+            ),
+            [
+              execute_work(
+                t,
+                next_cycle_number(t),
+                operation.source,
+                invalidated_work_input(t.definition, disposition.evidence),
+              ),
+            ],
+          );
+    }
+    if (
+      r.result instanceof FinalizationSucceeded &&
+      !(operation.basis instanceof PassedVerdict)
+    )
+      return not_allowed;
     if (r.result instanceof FinalizationSucceeded)
       return decided(
         new TicketFinalizationSucceeded(
@@ -1318,6 +1583,8 @@ export function decide(
     if (report instanceof WorkResultReport) {
       const e = begin(
         CycleNumber(t.work_cycles_started),
+        Round(1),
+        new OpenedByWork(),
         new EvaluationInput(
           id,
           report.result.result_ref,
@@ -1363,18 +1630,14 @@ export function decide(
       );
     if (state instanceof EvaluationPassed)
       return decided(new TicketEvaluationPassed(id, report), [
-        finalize(
-          t,
-          new FinalizationOperation(
-            updated.work_cycle,
-            Generation(1),
-            updated.input.work_result,
-            updated.input.accepted_source_ref,
-          ),
-        ),
+        finalize(t, finalization_after(updated, new PassedVerdict())),
       ]);
     if (state instanceof EvaluationBlocked)
       return decided(new TicketEvaluationBlocked(id, report));
+    if (evaluation_requested(updated))
+      return decided(new TicketEvaluationFailureReturned(id, report), [
+        finalize(t, finalization_after(updated, new FailedVerdict(updated))),
+      ]);
     const entries = rework_entries(updated, state.completed_stages);
     const disposition = policy(updated);
     if (disposition instanceof InvalidateEvaluationFailure)
@@ -1468,12 +1731,27 @@ function _evolve(g: TicketGraph, f: TicketEvent): TicketGraph | null {
     return revocation_allowed(s) ? put(new Revoked()) : null;
   if (f instanceof TicketEvaluationInvalidated) {
     const evaluation = invalidatable_evaluation(s);
-    return evaluation && evaluation.work_cycle === f.work_cycle
+    return evaluation &&
+      evaluation.work_cycle === f.work_cycle &&
+      !evaluation_requested(evaluation)
       ? _enter_work_cycle(
           g,
           t,
           invalidated_work_input(t.definition, f.evidence),
           evaluation.input.accepted_source_ref,
+        )
+      : null;
+  }
+  if (f instanceof TicketEvaluationWithdrawn) {
+    const evaluation = invalidatable_evaluation(s);
+    return evaluation &&
+      evaluation.work_cycle === f.work_cycle &&
+      evaluation.round === f.round &&
+      evaluation_requested(evaluation)
+      ? put(
+          new Finalization(
+            finalization_after(evaluation, new WithdrawnVerdict(f.evidence)),
+          ),
         )
       : null;
   }
@@ -1531,6 +1809,8 @@ function _evolve(g: TicketGraph, f: TicketEvent): TicketGraph | null {
       new Evaluation(
         begin(
           CycleNumber(t.work_cycles_started),
+          Round(1),
+          new OpenedByWork(),
           new EvaluationInput(
             f.ticket,
             f.result.result_ref,
@@ -1562,14 +1842,50 @@ function _evolve(g: TicketGraph, f: TicketEvent): TicketGraph | null {
   if (
     f instanceof TicketFinalizationSucceeded ||
     f instanceof TicketFinalizationNeedsWork ||
-    f instanceof TicketFinalizationUnavailable
+    f instanceof TicketFinalizationUnavailable ||
+    f instanceof TicketFinalizationNeedsEvaluation ||
+    f instanceof TicketFinalizationFailureReworked ||
+    f instanceof TicketFinalizationFailureEscalated ||
+    f instanceof TicketFinalizationFailureInvalidated
   ) {
     if (
       !(s instanceof Finalization) ||
       !_finalization_current(s.operation, f.work_cycle, f.generation)
     )
       return null;
-    if (f instanceof TicketFinalizationSucceeded) return put(new Done());
+    const basis = s.operation.basis;
+    if (f instanceof TicketFinalizationNeedsEvaluation)
+      return put(
+        new Evaluation(requested_evaluation(t, s.operation, f.evidence)),
+      );
+    if (
+      f instanceof TicketFinalizationFailureReworked ||
+      f instanceof TicketFinalizationFailureEscalated ||
+      f instanceof TicketFinalizationFailureInvalidated
+    ) {
+      if (!(basis instanceof FailedVerdict)) return null;
+      if (f instanceof TicketFinalizationFailureEscalated)
+        return put(
+          new Escalated(
+            new EvaluationFailureEscalated(
+              new EvaluationFailureEscalation(
+                failed_basis_entries(basis),
+                s.operation.source,
+              ),
+            ),
+          ),
+        );
+      return _enter_work_cycle(
+        g,
+        t,
+        f instanceof TicketFinalizationFailureReworked
+          ? evaluation_rework_input(t.definition, failed_basis_entries(basis))
+          : invalidated_work_input(t.definition, f.invalidation),
+        s.operation.source,
+      );
+    }
+    if (f instanceof TicketFinalizationSucceeded)
+      return basis instanceof PassedVerdict ? put(new Done()) : null;
     if (f instanceof TicketFinalizationNeedsWork)
       return _enter_work_cycle(
         g,
@@ -1597,22 +1913,22 @@ function _evolve(g: TicketGraph, f: TicketEvent): TicketGraph | null {
       : null;
   if (f instanceof TicketEvaluationPassed)
     return updated.state instanceof EvaluationPassed
-      ? put(
-          new Finalization(
-            new FinalizationOperation(
-              updated.work_cycle,
-              Generation(1),
-              updated.input.work_result,
-              updated.input.accepted_source_ref,
-            ),
-          ),
-        )
+      ? put(new Finalization(finalization_after(updated, new PassedVerdict())))
       : null;
   if (f instanceof TicketEvaluationBlocked)
     return updated.state instanceof EvaluationBlocked
       ? put(new Escalated(new EvaluationBlockedEscalated(updated)))
       : null;
   if (!(updated.state instanceof EvaluationFailed)) return null;
+  if (f instanceof TicketEvaluationFailureReturned)
+    return evaluation_requested(updated)
+      ? put(
+          new Finalization(
+            finalization_after(updated, new FailedVerdict(updated)),
+          ),
+        )
+      : null;
+  if (evaluation_requested(updated)) return null;
   if (f instanceof TicketEvaluationFailureInvalidated)
     return _enter_work_cycle(
       g,
@@ -1701,14 +2017,40 @@ function _escalation_valid(t: Ticket, e: Escalation): boolean {
       v.state instanceof EvaluationBlocked
     );
   }
-  const f = e.escalation,
-    o = f.finalization;
+  const f = e.escalation;
+  return _finalization_operation_valid(t, f.finalization) && f.evidence > 0;
+}
+function _finalization_basis_valid(
+  t: Ticket,
+  o: FinalizationOperation,
+): boolean {
+  const basis = o.basis;
+  if (basis instanceof PassedVerdict) return true;
+  if (basis instanceof WithdrawnVerdict)
+    return o.round > 1 && basis.evidence > 0;
+  const e = basis.evaluation;
+  return (
+    evaluation_invariant(e) &&
+    evaluation_requested(e) &&
+    e.input.ticket === t.definition.id &&
+    e.work_cycle === o.work_cycle &&
+    e.round === o.round &&
+    e.input.work_result === o.input &&
+    e.input.accepted_source_ref === o.source &&
+    failed_basis_entries(basis).length > 0
+  );
+}
+function _finalization_operation_valid(
+  t: Ticket,
+  o: FinalizationOperation,
+): boolean {
   return (
     o.work_cycle === t.work_cycles_started &&
-    o.generation > 0 &&
+    o.round > 0 &&
+    o.generation >= o.round &&
     o.input > 0 &&
     o.source > 0 &&
-    f.evidence > 0
+    _finalization_basis_valid(t, o)
   );
 }
 function _ticket_invariant(t: Ticket): boolean {
@@ -1736,15 +2078,8 @@ function _ticket_invariant(t: Ticket): boolean {
       e.state instanceof Running
     );
   }
-  if (s instanceof Finalization) {
-    const o = s.operation;
-    return (
-      o.work_cycle === t.work_cycles_started &&
-      o.generation > 0 &&
-      o.input > 0 &&
-      o.source > 0
-    );
-  }
+  if (s instanceof Finalization)
+    return _finalization_operation_valid(t, s.operation);
   if (s instanceof Escalated) return _escalation_valid(t, s.escalation);
   return true;
 }
@@ -1775,6 +2110,7 @@ function _obligation_valid(o: Obligation): boolean {
   return (
     o.ticket > 0 &&
     f.work_cycle > 0 &&
+    f.round > 0 &&
     f.generation > 0 &&
     o.configuration > 0 &&
     f.input > 0 &&
@@ -1809,7 +2145,8 @@ function _reported_tasks(f: TicketEvent): readonly TaskId[] {
     f instanceof TicketEvaluationReworkStarted ||
     f instanceof TicketEvaluationFailureEscalated ||
     f instanceof TicketEvaluationFailureInvalidated ||
-    f instanceof TicketEvaluationBlocked
+    f instanceof TicketEvaluationBlocked ||
+    f instanceof TicketEvaluationFailureReturned
   )
     return [report_task(f.report)];
   return [];
@@ -1834,11 +2171,19 @@ function _orphans_cancelled(
     );
   });
 }
+function _completion_follows_a_pass(g: TicketGraph, f: TicketEvent): boolean {
+  if (!(f instanceof TicketFinalizationSucceeded)) return true;
+  const s = g.tickets.get(f.ticket)?.state;
+  return (
+    s instanceof Finalization && s.operation.basis instanceof PassedVerdict
+  );
+}
 export function decision_valid(g: TicketGraph, d: TicketDecision): boolean {
   if (d instanceof TicketRefused) return equal(apply_decision(g, d), g);
   const evolved = evolve(g, d.event);
   return (
     _orphans_cancelled(g, evolved, d.event, d.obligations) &&
+    _completion_follows_a_pass(g, d.event) &&
     d.obligations.every(
       (o, i) =>
         _obligation_valid(o) &&

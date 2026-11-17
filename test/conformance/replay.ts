@@ -71,10 +71,18 @@ function simulation(action: string, prior: k.TicketGraph): k.TicketCommand {
       return b.failure_command(prior, 1, 504, false, true);
     case "invalidateOne": {
       const s1 = prior.tickets.get(t.TicketId(1))?.state;
-      return s1 instanceof k.Evaluation
+      const held =
+        s1 instanceof k.Evaluation
+          ? s1.evaluation
+          : s1 instanceof k.Escalated &&
+              s1.escalation instanceof k.EvaluationBlockedEscalated
+            ? s1.escalation.evaluation
+            : null;
+      return held
         ? new k.InvalidateEvaluation(
             t.TicketId(1),
-            s1.evaluation.work_cycle,
+            held.work_cycle,
+            held.round,
             t.ContentRef(510),
           )
         : (() => {
@@ -101,9 +109,48 @@ function simulation(action: string, prior: k.TicketGraph): k.TicketCommand {
         1,
         new k.FinalizationResultUnavailable(t.ContentRef(507)),
       );
+    case "requestEvaluationOne":
+      return b.finalization_command(
+        prior,
+        1,
+        new k.FinalizationNeedsEvaluation(t.ContentRef(512)),
+      );
+    case "failureStandsOne":
+    case "failureStandsEscalatedOne":
+    case "failureStandsInvalidatedOne":
+      return b.finalization_command(
+        prior,
+        1,
+        new k.FinalizationFailureStands(
+          t.ContentRef(
+            action === "failureStandsOne"
+              ? 513
+              : action === "failureStandsEscalatedOne"
+                ? 514
+                : 515,
+          ),
+        ),
+      );
     default:
       throw new ConversionError(`unknown step alternative ${action}`);
   }
+}
+function finalization_report(
+  e: {
+    ticket: t.TicketId;
+    work_cycle: t.CycleNumber;
+    generation: t.Generation;
+  },
+  result: k.FinalizationResult,
+): k.TicketCommand {
+  return new k.ReportFinalizationResult(
+    new k.FinalizationResultReport(
+      e.ticket,
+      e.work_cycle,
+      e.generation,
+      result,
+    ),
+  );
 }
 function event_command(e: k.TicketEvent): Reconstructed {
   let command: k.TicketCommand;
@@ -154,8 +201,52 @@ function event_command(e: k.TicketEvent): Reconstructed {
       break;
     }
     case "TicketEvaluationInvalidated":
-      command = new k.InvalidateEvaluation(e.ticket, e.work_cycle, e.evidence);
+      command = new k.InvalidateEvaluation(
+        e.ticket,
+        e.work_cycle,
+        t.Round(1),
+        e.evidence,
+      );
       break;
+    case "TicketEvaluationWithdrawn":
+      command = new k.InvalidateEvaluation(
+        e.ticket,
+        e.work_cycle,
+        e.round,
+        e.evidence,
+      );
+      break;
+    case "TicketEvaluationFailureReturned":
+      command = new k.ReportTaskTerminal(e.report);
+      break;
+    case "TicketFinalizationNeedsEvaluation":
+      command = finalization_report(
+        e,
+        new k.FinalizationNeedsEvaluation(e.evidence),
+      );
+      break;
+    case "TicketFinalizationFailureReworked":
+      command = finalization_report(
+        e,
+        new k.FinalizationFailureStands(e.evidence),
+      );
+      break;
+    case "TicketFinalizationFailureEscalated":
+      policy = () => new k.EscalateEvaluationFailure();
+      command = finalization_report(
+        e,
+        new k.FinalizationFailureStands(e.evidence),
+      );
+      break;
+    case "TicketFinalizationFailureInvalidated": {
+      const invalidation = e.invalidation;
+      policy = () => new k.InvalidateEvaluationFailure(invalidation);
+      command = finalization_report(
+        e,
+        new k.FinalizationFailureStands(e.evidence),
+      );
+      break;
+    }
     case "TicketEvaluationProgressed":
     case "TicketEvaluationPassed":
     case "TicketEvaluationBlocked":
@@ -190,9 +281,12 @@ export function command_from_step(
       throw new ConversionError("model step makes no nondeterministic pick");
     return new Reconstructed(
       simulation(step.action, prior),
-      step.action === "invalidateFailedEvaluatorOne"
+      step.action === "invalidateFailedEvaluatorOne" ||
+        step.action === "failureStandsInvalidatedOne"
         ? () => new k.InvalidateEvaluationFailure(t.ContentRef(1601))
-        : k.rework_policy,
+        : step.action === "failureStandsEscalatedOne"
+          ? () => new k.EscalateEvaluationFailure()
+          : k.rework_policy,
       "action",
     );
   }

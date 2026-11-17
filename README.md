@@ -44,7 +44,7 @@ data that is valid in that phase.
   (which starts another work cycle) or `Unavailable` (which escalates).
 - **Invalidating an evaluation.** `InvalidateEvaluation` abandons a running
   evaluation without a verdict: its tasks are cancelled and the ticket returns
-  to Work from the accepted source, as `StackInvalidated`. It is not counted as
+  to Work from the accepted source, as `EvaluationInvalidated`. It is not counted as
   an evaluation failure. A failure policy may also answer
   `InvalidateEvaluationFailure` for a failed verdict, which records the verdict
   and returns to Work the same way.
@@ -131,7 +131,7 @@ The traces are generated artifacts. Don't edit them by hand.
 ## Install and use
 
 ```sh
-npm i github:kasofsk/chug-ticket-domain#v0.7.0
+npm i github:kasofsk/chug-ticket-domain#v0.8.0
 ```
 
 `dist/` isn't committed. The `prepare` script builds it at install time.
