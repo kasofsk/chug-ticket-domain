@@ -21,7 +21,24 @@ export const HERE = dirname(fileURLToPath(import.meta.url)),
   INDEX = join(TRACES, "index.json");
 export const INVARIANT = "modelInvariant",
   SCENARIO_SEED = "0x5ce9a10",
-  SIMULATION_SEEDS = ["0x01", "0x02", "0x08", "0x10"] as const,
+  SIMULATION_SEEDS = [
+    "0x08d12e65",
+    "0x3ba36b82",
+    "0x7d8562c7",
+    "0x96af9ca5",
+  ] as const,
+  FINALIZER_INIT = "initFinalizing",
+  FINALIZER_STEP = "finalizerStep",
+  FINALIZER_INVARIANT = "finalizerInvariant",
+  FINALIZER_SEEDS = [
+    "0x36fbef9f",
+    "0x54021d70",
+    "0xb9f45639",
+    "0xbe1e08bb",
+    "0xea33f0b4",
+    "0xfa8cfc2d",
+    "0xfd1f9ecf",
+  ] as const,
   SIMULATION_STEPS = 25,
   COVERAGE_TYPES = ["TicketEvent", "TicketRefusal", "TicketState"] as const;
 export const GENERATOR = "model/ticket-domain/export_traces.ts";
@@ -49,6 +66,7 @@ export interface Entry extends Summary {
   kind: "scenario" | "simulation";
   scenario?: string;
   seed?: string;
+  step?: string;
   maxSteps?: number;
   invariant?: string;
 }
@@ -61,8 +79,10 @@ export interface TraceIndex {
   model: string;
   scenarioSeed: string;
   simulationSeeds: readonly string[];
+  finalizerSeeds: readonly string[];
   simulationSteps: number;
   invariant: string;
+  finalizerInvariant: string;
   coverage: Record<string, Coverage>;
   traces: Entry[];
 }
@@ -255,52 +275,71 @@ export function export_traces(
         ...summarize(trace),
       });
     }
-    for (const seed of SIMULATION_SEEDS) {
-      for (const stale of readdirSync(out).filter((f) =>
-        /^sim_.*\.itf\.json$/.test(f),
-      ))
-        unlinkSync(join(out, stale));
-      run(quint, [
-        "run",
-        "--seed",
-        seed,
-        "--max-steps",
-        String(SIMULATION_STEPS),
-        "--max-samples",
-        "1",
-        "--n-threads",
-        "1",
-        "--mbt",
-        `--invariant=${INVARIANT}`,
-        "--out-itf",
-        join(out, "sim_{seq}.itf.json"),
-        basename(MODEL),
-      ]);
-      const produced = readdirSync(out)
-        .filter((f) => /^sim_.*\.itf\.json$/.test(f))
-        .sort();
-      if (!produced.length)
-        throw new ExportError(`simulation seed ${seed} produced no trace`);
-      const trace = normalize(
-          JSON.parse(readFileSync(join(out, produced[0]!), "utf8")),
-          {
-            kind: "simulation",
-            seed,
-            maxSteps: SIMULATION_STEPS,
-            invariant: INVARIANT,
-          },
-        ),
-        file = `simulation-seed-${seed}.itf.json`;
-      write_trace(join(traces, file), trace);
-      entries.push({
-        file,
-        kind: "simulation",
-        seed,
-        maxSteps: SIMULATION_STEPS,
+    const simulations: {
+      seeds: readonly string[];
+      walk: string[];
+      invariant: string;
+      prefix: string;
+      meta: { step?: string };
+    }[] = [
+      {
+        seeds: SIMULATION_SEEDS,
+        walk: [],
         invariant: INVARIANT,
-        ...summarize(trace),
-      });
-    }
+        prefix: "simulation-seed-",
+        meta: {},
+      },
+      {
+        seeds: FINALIZER_SEEDS,
+        walk: [`--init=${FINALIZER_INIT}`, `--step=${FINALIZER_STEP}`],
+        invariant: FINALIZER_INVARIANT,
+        prefix: "simulation-finalizer-seed-",
+        meta: { step: FINALIZER_STEP },
+      },
+    ];
+    for (const simulation of simulations)
+      for (const seed of simulation.seeds) {
+        for (const stale of readdirSync(out).filter((f) =>
+          /^sim_.*\.itf\.json$/.test(f),
+        ))
+          unlinkSync(join(out, stale));
+        run(quint, [
+          "run",
+          ...simulation.walk,
+          "--seed",
+          seed,
+          "--max-steps",
+          String(SIMULATION_STEPS),
+          "--max-samples",
+          "1",
+          "--n-threads",
+          "1",
+          "--mbt",
+          `--invariant=${simulation.invariant}`,
+          "--out-itf",
+          join(out, "sim_{seq}.itf.json"),
+          basename(MODEL),
+        ]);
+        const produced = readdirSync(out)
+          .filter((f) => /^sim_.*\.itf\.json$/.test(f))
+          .sort();
+        if (!produced.length)
+          throw new ExportError(`simulation seed ${seed} produced no trace`);
+        const described = {
+            kind: "simulation" as const,
+            seed,
+            ...simulation.meta,
+            maxSteps: SIMULATION_STEPS,
+            invariant: simulation.invariant,
+          },
+          trace = normalize(
+            JSON.parse(readFileSync(join(out, produced[0]!), "utf8")),
+            described,
+          ),
+          file = `${simulation.prefix}${seed}.itf.json`;
+        write_trace(join(traces, file), trace);
+        entries.push({ file, ...described, ...summarize(trace) });
+      }
   } finally {
     rmSync(out, { recursive: true, force: true });
   }
@@ -318,8 +357,10 @@ export function export_traces(
     model: basename(MODEL),
     scenarioSeed: SCENARIO_SEED,
     simulationSeeds: SIMULATION_SEEDS,
+    finalizerSeeds: FINALIZER_SEEDS,
     simulationSteps: SIMULATION_STEPS,
     invariant: INVARIANT,
+    finalizerInvariant: FINALIZER_INVARIANT,
     coverage,
     traces: entries,
   };

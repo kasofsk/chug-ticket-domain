@@ -24,16 +24,19 @@ module ticket_domain {
   type FinalizationBasis =
     PassedVerdict
     | FailedVerdict(EvaluationInstance)
-    | WithdrawnVerdict(int)
+    | WithdrawnVerdict
 
-  // `round` is the evaluation the basis is about. `generation` counts the
-  // operations of one work cycle and never repeats within it.
+  // `round` is the evaluation the basis is about and `origin` is what opened
+  // that evaluation, so the operation names the request its verdict answers.
+  // `generation` counts the operations of one work cycle and never repeats
+  // within it.
   type FinalizationOperation = {
     workCycle: int,
     round: int,
     generation: int,
     input: int,
     source: int,
+    origin: EvaluationOrigin,
     basis: FinalizationBasis
   }
 
@@ -231,14 +234,6 @@ module ticket_domain {
     evidence: int
   }
 
-  type FinalizationFailureInvalidatedFact = {
-    ticket: int,
-    workCycle: int,
-    generation: int,
-    evidence: int,
-    invalidation: int
-  }
-
   type TicketUpdate = {
     ticket: int,
     revision: int,
@@ -271,7 +266,6 @@ module ticket_domain {
     | TicketFinalizationNeedsEvaluation(FinalizationFact)
     | TicketFinalizationFailureReworked(FinalizationFact)
     | TicketFinalizationFailureEscalated(FinalizationFact)
-    | TicketFinalizationFailureInvalidated(FinalizationFailureInvalidatedFact)
 
   type TicketTaskObligation = {
     ticket: int,
@@ -515,6 +509,7 @@ module ticket_domain {
     },
     input: evaluation.input.workResult,
     source: evaluation.input.acceptedSourceRef,
+    origin: evaluation.origin,
     basis: basis,
   }
 
@@ -580,8 +575,10 @@ module ticket_domain {
     and isPending(graph.tickets.get(ticket).state)
     and dependenciesComplete(graph, graph.tickets.get(ticket))
 
+  // A finalization may complete only on a passed basis, so on any other
+  // basis nothing is being finalized and the ticket may be revoked.
   pure def revocationAllowed(state: TicketState): bool = match state {
-    | Finalization(_) => false
+    | Finalization(operation) => operation.basis != PassedVerdict
     | Done => false
     | Revoked => false
     | _ => true
@@ -775,7 +772,7 @@ module ticket_domain {
         }),
         cancellations.concat([finalize(
           ticket,
-          finalizationAfter(evaluation, WithdrawnVerdict(request.evidence)),
+          finalizationAfter(evaluation, WithdrawnVerdict),
         )]),
       )
   }
@@ -1096,6 +1093,9 @@ module ticket_domain {
                     evidence: evidence,
                   }
                   match finalization.basis {
+                    // A failure that stands is the ticket's own, so a policy
+                    // that would invalidate it has nothing to invalidate and
+                    // the ticket escalates.
                     | FailedVerdict(evaluation) =>
                         match failurePolicy(evaluation) {
                           | ReworkEvaluationFailure => decided(
@@ -1110,27 +1110,9 @@ module ticket_domain {
                                 ),
                               )],
                             )
-                          | EscalateEvaluationFailure => decided(
+                          | _ => decided(
                               TicketFinalizationFailureEscalated(fact),
                               [],
-                            )
-                          | InvalidateEvaluationFailure(invalidation) => decided(
-                              TicketFinalizationFailureInvalidated({
-                                ticket: report.ticket,
-                                workCycle: report.workCycle,
-                                generation: report.generation,
-                                evidence: evidence,
-                                invalidation: invalidation,
-                              }),
-                              [executeWork(
-                                ticket,
-                                nextCycleNumber(ticket),
-                                finalization.source,
-                                invalidatedWorkInput(
-                                  ticket.definition,
-                                  invalidation,
-                                ),
-                              )],
                             )
                         }
                     | _ => notAllowed
@@ -1526,10 +1508,7 @@ module ticket_domain {
         else if (not(evaluationRequested(held[0]))) graph
         else updateTicket(graph, withdrawn.ticket, {
           ...ticket,
-          state: Finalization(finalizationAfter(
-            held[0],
-            WithdrawnVerdict(withdrawn.evidence),
-          )),
+          state: Finalization(finalizationAfter(held[0], WithdrawnVerdict)),
         })
       }
     | TicketFinalizationNeedsEvaluation(request) => {
@@ -1593,27 +1572,6 @@ module ticket_domain {
                       source: finalization.source,
                     })),
                   })
-                | _ => graph
-              }
-          | _ => graph
-        }
-      }
-    | TicketFinalizationFailureInvalidated(stands) => {
-        val ticket = graph.tickets.get(stands.ticket)
-        match ticket.state {
-          | Finalization(finalization) =>
-              if (not(finalizationCurrent(
-                finalization,
-                stands.workCycle,
-                stands.generation,
-              ))) graph
-              else match finalization.basis {
-                | FailedVerdict(_) => enterWorkCycle(
-                    graph,
-                    ticket,
-                    invalidatedWorkInput(ticket.definition, stands.invalidation),
-                    finalization.source,
-                  )
                 | _ => graph
               }
           | _ => graph
@@ -1718,17 +1676,30 @@ module ticket_domain {
     operation: FinalizationOperation,
   ): bool = match operation.basis {
     | PassedVerdict => true
-    | WithdrawnVerdict(evidence) => operation.round > 1 and evidence > 0
+    | WithdrawnVerdict => operation.round > 1
     | FailedVerdict(evaluation) =>
         invariant(evaluation)
         and evaluationRequested(evaluation)
         and evaluation.input.ticket == ticket.definition.id
         and evaluation.workCycle == operation.workCycle
         and evaluation.round == operation.round
+        and evaluation.origin == operation.origin
         and evaluation.input.workResult == operation.input
         and evaluation.input.acceptedSourceRef == operation.source
         and failedBasisEntries(operation.basis).length() > 0
   }
+
+  // Round 1 is the one a work result opened, and a later round answers a
+  // request made by an earlier operation of the same work cycle.
+  pure def finalizationOriginValid(operation: FinalizationOperation): bool =
+    match operation.origin {
+      | OpenedByWork => operation.round == 1
+      | Requested(request) =>
+          operation.round > 1
+          and request.generation > 0
+          and request.generation < operation.generation
+          and request.evidence > 0
+    }
 
   pure def finalizationOperationValid(
     ticket: Ticket,
@@ -1739,6 +1710,7 @@ module ticket_domain {
     and operation.generation >= operation.round
     and operation.input > 0
     and operation.source > 0
+    and finalizationOriginValid(operation)
     and finalizationBasisValid(ticket, operation)
 
   pure def escalationValid(ticket: Ticket, escalation: Escalation): bool =
@@ -1853,16 +1825,43 @@ module ticket_domain {
       liveTaskList(graph.tickets.get(ticketId))
     else []
 
+  // The obligations a ticket's state holds live: its work task's, or its
+  // evaluation's awaited evaluators'.
+  pure def ticketLiveObligations(
+    graph: TicketGraph,
+    ticketId: int,
+  ): List[TaskObligation] =
+    if (not(graph.tickets.keys().contains(ticketId))) []
+    else {
+      val ticket = graph.tickets.get(ticketId)
+      match ticket.state {
+        | Work(work) => [workTaskObligation(
+            ticket,
+            ticket.workCyclesStarted,
+            work.source,
+            work.input,
+          )]
+        | Evaluation(evaluation) => currentTaskObligations(evaluation)
+        | _ => []
+      }
+    }
+
+  // An obligation to execute is the whole obligation of a task the decision
+  // made live, one to cancel names a task it stopped, and one to finalize is
+  // the operation the ticket entered under the ticket's own configuration.
   pure def obligationAgrees(
     prior: TicketGraph,
     evolved: TicketGraph,
     obligation: Obligation,
   ): bool = match obligation {
-    | ExecuteTask(execution) =>
-        listHasTask(
-          ticketLiveTasks(evolved, execution.ticket),
+    | ExecuteTask(execution) => {
+        val live = ticketLiveObligations(evolved, execution.ticket)
+        live.indices().exists(index => live[index] == execution.task)
+        and not(listHasTask(
+          ticketLiveTasks(prior, execution.ticket),
           execution.task.task,
-        )
+        ))
+      }
     | CancelTask(cancellation) =>
         listHasTask(
           ticketLiveTasks(prior, cancellation.ticket),
@@ -1874,6 +1873,8 @@ module ticket_domain {
         ))
     | FinalizeTicket(finalization) =>
         evolved.tickets.keys().contains(finalization.ticket)
+        and finalization.configuration == evolved.tickets
+          .get(finalization.ticket).definition.finalizationConfiguration
         and match evolved.tickets.get(finalization.ticket).state {
           | Finalization(operation) => operation == finalization.finalization
           | _ => false
@@ -1921,7 +1922,54 @@ module ticket_domain {
       or obligationsCancel(obligations, ticket, before[index]))
   })
 
+  pure def obligationsExecute(
+    obligations: List[Obligation],
+    ticket: int,
+    task: TaskIdentity,
+  ): bool = obligations.indices().exists(index =>
+    match obligations[index] {
+      | ExecuteTask(execution) =>
+          execution.ticket == ticket and execution.task.task == task
+      | _ => false
+    })
+
+  pure def obligationsFinalize(
+    obligations: List[Obligation],
+    ticket: int,
+    operation: FinalizationOperation,
+  ): bool = obligations.indices().exists(index =>
+    match obligations[index] {
+      | FinalizeTicket(request) =>
+          request.ticket == ticket and request.finalization == operation
+      | _ => false
+    })
+
+  // A decision obliges every task it makes live and every finalization
+  // operation it opens. `obligationAgrees` holds each obligation to the state;
+  // this holds the state to the obligations.
+  pure def obligationsComplete(
+    prior: TicketGraph,
+    evolved: TicketGraph,
+    obligations: List[Obligation],
+  ): bool = evolved.tickets.keys().forall(ticket => {
+    val before = ticketLiveTasks(prior, ticket)
+    val after = ticketLiveTasks(evolved, ticket)
+    after.indices().forall(index =>
+      listHasTask(before, after[index])
+      or obligationsExecute(obligations, ticket, after[index]))
+    and match evolved.tickets.get(ticket).state {
+      | Finalization(operation) =>
+          (prior.tickets.keys().contains(ticket)
+            and prior.tickets.get(ticket).state == Finalization(operation))
+          or obligationsFinalize(obligations, ticket, operation)
+      | _ => true
+    }
+  })
+
   // A ticket completes only from a finalization whose basis is a pass.
+  // `evolve` applies the event nowhere else, so beside `evolved != graph`
+  // this rejects nothing more while `evolve` is right. It is stated on its
+  // own so that weakening `evolve` and `decide` together is still caught.
   pure def completionFollowsAPass(
     prior: TicketGraph,
     event: TicketEvent,
@@ -1942,10 +1990,12 @@ module ticket_domain {
     | TicketRefused(_) => applyDecision(graph, decision) == graph
     | TicketDecided(success) => {
         val evolved = evolve(graph, success.event)
-        success.obligations.indices().forall(index =>
+        evolved != graph
+        and success.obligations.indices().forall(index =>
           obligationValid(success.obligations[index])
           and obligationAgrees(graph, evolved, success.obligations[index]))
         and obligationsUnique(success.obligations)
+        and obligationsComplete(graph, evolved, success.obligations)
         and orphansCancelled(graph, evolved, success.event, success.obligations)
         and completionFollowsAPass(graph, success.event)
         and graphInvariant(evolved)

@@ -33,10 +33,15 @@ function fake_quint(_quint: string, args: readonly string[]): void {
       );
     }
   } else {
-    const seed = args[args.indexOf("--seed") + 1]!;
+    const seed = args[args.indexOf("--seed") + 1]!,
+      walk = args.includes(`--step=${traces.FINALIZER_STEP}`)
+        ? "finalizer-"
+        : "";
     writeFileSync(
       pattern.replace("{seq}", "0"),
-      readFileSync(join(traces.TRACES, `simulation-seed-${seed}.itf.json`)),
+      readFileSync(
+        join(traces.TRACES, `simulation-${walk}seed-${seed}.itf.json`),
+      ),
     );
   }
 }
@@ -49,7 +54,7 @@ test("trace export is deterministic with complete model-declared coverage", () =
     run: fake_quint,
   });
   expect(first.removed).toEqual(["stale.itf.json"]);
-  expect(first.traces).toHaveLength(59);
+  expect(first.traces).toHaveLength(77);
   expect(existsSync(join(output, "README.md"))).toBe(true);
   expect(first.coverage).toEqual(
     JSON.parse(readFileSync(traces.INDEX, "utf8")).coverage,

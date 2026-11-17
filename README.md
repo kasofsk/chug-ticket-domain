@@ -17,14 +17,16 @@ data that is valid in that phase.
 ```
             dispatch                 result accepted          all stages pass
  Pending ────────────────▶ Work ─────────────────▶ Evaluation ────────────────▶ Finalization ──▶ Done
- (waits on                   ▲                         │                             │
-  dependencies)              │   rework                │ failed (policy chooses      │ needs work
-                             ├─────────────────────────┤  rework or escalate)        │
-                             └───────────────────────────────────────────────────────┘
+ (waits on                   ▲                         │  ▲                          │  │
+  dependencies)              │   rework                │  │   needs evaluation       │  │
+                             ├─────────────────────────┤  └──────────────────────────┘  │
+                             │   failed (policy chooses rework or escalate)             │
+                             └──────────────────────────────────────────────────────────┘
+                                 needs work, or a failure that stands
 
  Escalated  ◀── work failure / execution unavailable / evaluation failed or blocked /
                 finalization unavailable;   ResumeTicket continues from where it stopped
- Revoked    ◀── RevokeTicket from any phase except Finalization and Done
+ Revoked    ◀── RevokeTicket from any phase except Done and a Finalization that may be completing
 ```
 
 - **Pending.** The ticket has a released definition and a set of same-project
@@ -40,19 +42,51 @@ data that is valid in that phase.
   rework or escalates.
 - **Finalization.** Finalization applies the accepted result to an external
   destination. It has its own authority and generation counter because it
-  mutates something outside the domain. It ends as `Succeeded`, `NeedsWork`
-  (which starts another work cycle) or `Unavailable` (which escalates).
+  mutates something outside the domain. Its finalizer reports one of five
+  results: `Succeeded`, `NeedsWork` (which starts another work cycle),
+  `Unavailable` (which escalates), `NeedsEvaluation` or `FailureStands`.
+- **Evaluating again.** `NeedsEvaluation` opens another evaluation of the same
+  accepted result, in the same work cycle, with no work in between. The first
+  evaluation of a work cycle is round 1 and each requested one is the next
+  round. A requested round returns to Finalization however it concludes (a
+  blocked one escalates first, as any evaluation does), and the operation it
+  returns to says how as its _basis_, and names the request it answers as its
+  _origin_:
+
+  | The round                             | Basis       | What the finalizer may report next                         |
+  | ------------------------------------- | ----------- | ---------------------------------------------------------- |
+  | passed                                | `Passed`    | `Succeeded`, `NeedsEvaluation`, `NeedsWork`, `Unavailable` |
+  | failed                                | `Failed`    | `FailureStands`, `NeedsEvaluation`, `NeedsWork`, `Unavailable` |
+  | was withdrawn by `InvalidateEvaluation` | `Withdrawn` | `NeedsEvaluation`, `NeedsWork`, `Unavailable`              |
+
+  A requested round's failure is not disposed when it concludes. The failure
+  policy is asked only when the finalizer reports `FailureStands`, and then
+  chooses rework or escalation; a policy that would invalidate the failure
+  escalates instead, because a failure that stands is the ticket's own. The
+  domain puts no bound on how many rounds a finalizer requests: that bound is
+  the finalizer's.
 - **Invalidating an evaluation.** `InvalidateEvaluation` abandons a running
-  evaluation without a verdict: its tasks are cancelled and the ticket returns
-  to Work from the accepted source, as `EvaluationInvalidated`. It is not counted as
-  an evaluation failure. A failure policy may also answer
-  `InvalidateEvaluationFailure` for a failed verdict, which records the verdict
-  and returns to Work the same way.
+  evaluation without a verdict and cancels its tasks. Where it goes next
+  depends on what opened the evaluation:
+
+  | Command                | Evaluation     | Event                         | Next state                    |
+  | ---------------------- | -------------- | ----------------------------- | ----------------------------- |
+  | `InvalidateEvaluation` | round 1        | `TicketEvaluationInvalidated` | Work, as `EvaluationInvalidated` |
+  | `InvalidateEvaluation` | a later round  | `TicketEvaluationWithdrawn`   | Finalization, basis `Withdrawn` |
+
+  Neither is counted as an evaluation failure. For a failed round 1 a failure
+  policy may also answer `InvalidateEvaluationFailure`, which records the
+  verdict and returns to Work the same way.
 - **Escalated.** The ticket is waiting for an operator. Resuming it starts a new
   work cycle, re-runs the blocked evaluators at a new generation, or retries
   finalization at a new generation.
 - **Done** and **Revoked** are terminal. Revoking a ticket cancels any
-  outstanding tasks.
+  outstanding tasks. A Finalization on a passed basis cannot be revoked,
+  because it may be completing; its finalizer reports `Unavailable` first. On
+  a failed or withdrawn basis nothing can complete, so the ticket can be
+  revoked where it waits. No obligation is cancelled for that: the finalizer's
+  outstanding `FinalizeTicket` is void once the ticket is Revoked, and a later
+  report on it is refused.
 
 Task reports are accepted only for the _current_ obligation. Once the state has
 moved on, late, stale or mismatched reports are refused.
@@ -122,7 +156,7 @@ follows this order:
 
 1. Edit the `.qnt`.
 2. Add scenarios and invariants to `ticket_tests.qnt`.
-3. Run the Quint checks.
+3. Run `npm run check-model`.
 4. Run `npm run export-traces`.
 5. Change `src/` until replay passes.
 
@@ -131,7 +165,7 @@ The traces are generated artifacts. Don't edit them by hand.
 ## Install and use
 
 ```sh
-npm i github:kasofsk/chug-ticket-domain#v0.8.0
+npm i github:kasofsk/chug-ticket-domain#v0.9.0
 ```
 
 `dist/` isn't committed. The `prepare` script builds it at install time.
@@ -162,12 +196,12 @@ The package also exports these entry points:
 npm test                # domain tests, trace conformance, generator tests
 npm run typecheck
 npm run build
+npm run check-model     # the model's own checks (needs quint on PATH)
 npm run export-traces   # regenerate traces from the model (needs quint on PATH)
 ```
 
-Model checks are run from `model/ticket-domain/`:
-
-```sh
-quint test ticket_tests.qnt
-quint run --invariant=modelInvariant --max-steps=25 --max-samples=400 ticket_tests.qnt
-```
+`npm run check-model` runs `model/ticket-domain/check.sh`: the scenarios, a
+simulation over every command from an empty graph, and a second simulation
+that starts at a finalizer and so reaches the requested-evaluation states the
+first seldom does. The second must reach each of those states in the run that
+checks its invariants.

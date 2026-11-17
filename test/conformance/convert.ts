@@ -103,7 +103,6 @@ import {
   TicketFinalizationNeedsEvaluation,
   TicketFinalizationFailureReworked,
   TicketFinalizationFailureEscalated,
-  TicketFinalizationFailureInvalidated,
   WorkEscalation,
   EvaluationFailureEscalation,
   FinalizationEscalation,
@@ -496,8 +495,11 @@ function parse_FinalizationBasis(v: Value): FinalizationBasis {
     }
     case "FailedVerdict":
       return new FailedVerdict(parse_EvaluationInstance(v.value));
-    case "WithdrawnVerdict":
-      return new WithdrawnVerdict(parse_ContentRef(v.value));
+    case "WithdrawnVerdict": {
+      if (!Array.isArray(v.value) || v.value.length)
+        throw new ConversionError("expected nullary payload");
+      return new WithdrawnVerdict();
+    }
     default:
       throw new ConversionError(`unknown FinalizationBasis tag '${v.tag}'`);
   }
@@ -509,6 +511,7 @@ function parse_FinalizationOperation(v: Value): FinalizationOperation {
     "generation",
     "input",
     "source",
+    "origin",
     "basis",
   ]);
   return new FinalizationOperation(
@@ -517,6 +520,7 @@ function parse_FinalizationOperation(v: Value): FinalizationOperation {
     parse_Generation(r["generation"]!),
     parse_ContentRef(r["input"]!),
     parse_ContentRef(r["source"]!),
+    parse_EvaluationOrigin(r["origin"]!),
     parse_FinalizationBasis(r["basis"]!),
   );
 }
@@ -1054,31 +1058,6 @@ function parse_TicketFinalizationFailureEscalated(
     parse_ContentRef(r["evidence"]!),
   );
 }
-function parse_TicketFinalizationFailureInvalidated(
-  v: Value,
-): TicketFinalizationFailureInvalidated {
-  if (
-    !(v instanceof Variant) ||
-    v.tag !== "TicketFinalizationFailureInvalidated"
-  )
-    throw new ConversionError(
-      "expected TicketFinalizationFailureInvalidated variant",
-    );
-  const r = record(v.value, [
-    "ticket",
-    "workCycle",
-    "generation",
-    "evidence",
-    "invalidation",
-  ]);
-  return new TicketFinalizationFailureInvalidated(
-    parse_TicketId(r["ticket"]!),
-    parse_CycleNumber(r["workCycle"]!),
-    parse_Generation(r["generation"]!),
-    parse_ContentRef(r["evidence"]!),
-    parse_ContentRef(r["invalidation"]!),
-  );
-}
 function parse_TicketFinalizationSucceeded(
   v: Value,
 ): TicketFinalizationSucceeded {
@@ -1417,8 +1396,6 @@ function parse_TicketEvent(v: Value): TicketEvent {
       return parse_TicketFinalizationFailureReworked(v);
     case "TicketFinalizationFailureEscalated":
       return parse_TicketFinalizationFailureEscalated(v);
-    case "TicketFinalizationFailureInvalidated":
-      return parse_TicketFinalizationFailureInvalidated(v);
     case "TicketFinalizationSucceeded":
       return parse_TicketFinalizationSucceeded(v);
     case "TicketFinalizationNeedsWork":

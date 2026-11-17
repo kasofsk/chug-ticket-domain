@@ -7,13 +7,17 @@ never hand-edit.
 - `scenario-<name>.itf.json` — one per `run` definition in `ticket_tests.qnt`.
 - `simulation-seed-<seed>.itf.json` — seeded random walks over `step`, 25 steps,
   checked against `modelInvariant`.
+- `simulation-finalizer-seed-<seed>.itf.json` — seeded random walks over
+  `finalizerStep` from `initFinalizing`, a ticket whose first evaluation has
+  passed, 25 steps, checked against `finalizerInvariant`. A walk whose ticket
+  finishes starts again from there (`restartFinalizing`).
 - `index.json` — generated summary: per trace the state count, per step the
   action, decision and each ticket's phase, plus the coverage tables below.
 
 ## Regenerating
 
 ```sh
-node ticket-domain/export_traces.ts   # from the repository root
+npm run export-traces   # from the repository root
 ```
 
 Needs `quint` on `PATH` (written against 0.32.0). It exits non-zero if a Quint
@@ -22,8 +26,8 @@ command fails, if a scenario yields no trace, or if a trace's status is not
 change: scenarios are discovered from the source, so added, renamed and removed
 `run` definitions need no edit to the script. It uses `quint test --out-itf`
 for the named scenarios (the only subcommand that runs `run` definitions) and
-`quint run --out-itf --seed ... --mbt --invariant=modelInvariant` for the
-simulations.
+`quint run --out-itf --seed ... --mbt --invariant=...` for the simulations,
+with `--init` and `--step` for the finalizer's.
 
 ## Reproducibility
 
@@ -58,7 +62,7 @@ JSON integer in the file — and one entry per variable. As encoded here:
 {"tag":"TicketRefused","value":{"tag":"TicketNotFound","value":{"#bigint":"0"}}}
 ```
 
-Compact JSON; `npx prettier ticket-domain/traces/index.json` renders the index for reading. Two things a
+Compact JSON; `npx prettier model/ticket-domain/traces/index.json` renders the index for reading. Two things a
 replay harness must know:
 
 - State 0 of every scenario trace is `init`, whose `lastDecision` is the
@@ -68,57 +72,49 @@ replay harness must know:
   consecutive decisions are normal and are not two decisions.
 
 Simulation traces add two variables from `--mbt`: `mbt::actionTaken`, the
-`step` alternative taken into that state, and `mbt::nondetPicks` (always `{}`).
-`actionTaken` is the only place a trace names its input — the variables record
-`priorGraph` and the resulting `lastDecision`, never the command. `quint test`
+step alternative taken into that state, and `mbt::nondetPicks`, a record of
+every name the model picks nondeterministically, each `Some(value)` where that
+step picked it and `None` otherwise. Only the finalizer's `stray…` alternatives
+pick anything: how far a command's address is from the current operation,
+round or task (on it, or off it in one part), and its result or outcome. `actionTaken` and those picks
+are the only place a trace names its input — the variables record `priorGraph`
+and the resulting `lastDecision`, never the command. `quint test`
 has no `--mbt`, so a scenario's inputs come from its `run` definition.
 
 ## Coverage
 
 `ticket.qnt` declares no Quint `action`s — it is pure functions over these
 types — so coverage is measured over the decision outcomes and lifecycle phases
-the command paths produce. Over the 59 traces: `TicketEvent` 26/26,
-`TicketState` 7/7, `TicketRefusal` 16/16: every declared variant is exercised.
+the command paths produce. Every declared variant of `TicketEvent`,
+`TicketState` and `TicketRefusal` is exercised.
 `index.json` holds the live tables.
 
 A refusal reaches a trace only when a scenario takes it through `submit`; one
 asserted inside `check(decide(...) == TicketRefused(...))` leaves `lastDecision`
 untouched and is invisible to replay.
 
-Names drop the `Test` suffix, decisions the `Ticket` prefix; equal runs collapse. The table below predates the invalidation scenarios and the later additions; `index.json` lists every scenario.
+`index.json` lists every scenario with its states and decisions.
 
-| scenario | states | decisions |
-| --- | --- | --- |
-| `repositoryContract` | 4 | NotFound Created |
-| `workOutputRepositoryContract` | 2 | NotFound |
-| `stageKeyContract` | 2 | NotFound |
-| `happyPath` | 12 | Created DependenciesIncomplete Dispatched WorkResultAccepted EvaluationProgressed EvaluationPassed FinalizationSucceeded |
-| `definitionRevisions` | 8 | Created Updated |
-| `updateRefusalLadder` | 16 | NotFound Created IdentityMismatch RevisionStale DependenciesChanged Dispatched NotPending |
-| `dispatchUsesTheRevisedDefinition` | 6 | Created Updated Dispatched |
-| `failedEvaluatorFindingsAreCarriedIntoReworkEntry` | 1 | (pure assertion, no state variables) |
-| `evaluatorFindingsReachTheNextWorkCycle` | 9 | Created Dispatched WorkResultAccepted EvaluationProgressed EvaluationReworkStarted |
-| `evaluationFailurePolicy` | 13 | Created Dispatched WorkResultAccepted EvaluationProgressed EvaluationReworkStarted WorkResultAccepted EvaluationProgressed EvaluationFailureEscalated WorkResumed |
-| `evaluationUnavailableResume` | 13 | Created Dispatched WorkResultAccepted EvaluationProgressed EvaluationBlocked EvaluationResumed EvaluationProgressed EvaluationPassed FinalizationSucceeded |
-| `evaluationFailurePrecedesUnavailability` | 7 | Created Dispatched WorkResultAccepted EvaluationProgressed EvaluationReworkStarted |
-| `evaluationProcessFailureRecovery` | 12 | Created Dispatched WorkResultAccepted EvaluationProgressed EvaluationBlocked EvaluationResumed EvaluationProgressed |
-| `duplicateEvaluatorTerminalIsRefused` | 6 | Created Dispatched WorkResultAccepted EvaluationProgressed |
-| `revocationCancelsOutstandingEvaluationTasks` | 8 | Created Dispatched WorkResultAccepted EvaluationProgressed Revoked |
-| `finalizationRecovery` | 18 | Created Dispatched WorkResultAccepted EvaluationProgressed EvaluationPassed FinalizationNeedsWork WorkResultAccepted EvaluationProgressed EvaluationPassed FinalizationUnavailable FinalizationResumed FinalizationSucceeded |
-| `revocationLeavesDependentsBlocked` | 12 | Created Dispatched Revoked |
-| `workFailureEscalation` | 14 | Created Dispatched WorkProcessFailed WorkResumed WorkExecutionUnavailable WorkResumed WorkResultAccepted |
-| `staleFinalizationIsRefused` | 13 | Created Dispatched WorkResultAccepted EvaluationProgressed EvaluationPassed FinalizationUnavailable FinalizationResumed FinalizationSucceeded |
-| `finalizationResultContract` | 10 | Created Dispatched WorkResultAccepted EvaluationProgressed EvaluationPassed |
-| `evolveIgnoresImpossiblePairing` | 20 | Created Dispatched WorkResultAccepted EvaluationProgressed EvaluationPassed FinalizationSucceeded Revoked |
+Seeds chosen by set cover over decisions, phases and step alternatives, and
+for the finalizer's walk over the situations `REQUIRED_FEATURES` in
+`test/conformance/replay.ts` lists. A walk over `step` mostly churns in
+`Pending` and `Revoked` and seldom reaches Finalization, which is why the
+finalizer's walk exists. Consecutive small seeds give walks that share long
+runs of steps, so candidates are spread over the seed space.
 
-Seeds chosen by set cover: random walks mostly churn in `Pending`/`Revoked`.
-
-| seed | states | phases reached | distinct step actions |
+| walk | seed | phases reached | distinct step actions |
 | --- | --- | --- | --- |
-| `0x01` | 26 | Pending, Work | 8 |
-| `0x02` | 26 | Pending, Revoked | 10 |
-| `0x08` | 26 | Escalated, Evaluation, Pending, Work | 14 |
-| `0x10` | 26 | Escalated, Evaluation, Pending, Work | 13 |
+| `step` | `0x08d12e65` | Pending, Revoked | 10 |
+| `step` | `0x3ba36b82` | Escalated, Evaluation, Pending, Revoked, Work | 13 |
+| `step` | `0x7d8562c7` | Evaluation, Pending, Work | 13 |
+| `step` | `0x96af9ca5` | Escalated, Evaluation, Pending, Work | 13 |
+| `finalizerStep` | `0x36fbef9f` | Done, Escalated, Evaluation, Finalization, Revoked, Work | 17 |
+| `finalizerStep` | `0x54021d70` | Escalated, Evaluation, Finalization, Revoked, Work | 14 |
+| `finalizerStep` | `0xb9f45639` | Escalated, Evaluation, Finalization, Revoked, Work | 10 |
+| `finalizerStep` | `0xbe1e08bb` | Done, Evaluation, Finalization, Revoked | 11 |
+| `finalizerStep` | `0xea33f0b4` | Escalated, Evaluation, Finalization, Revoked, Work | 11 |
+| `finalizerStep` | `0xfa8cfc2d` | Escalated, Evaluation, Finalization, Revoked, Work | 14 |
+| `finalizerStep` | `0xfd1f9ecf` | Escalated, Evaluation, Finalization, Work | 12 |
 
 The `executionRequirementsPreserved` scenario records distinct work and
 evaluator execution-requirement references through a pending revision,
