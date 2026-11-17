@@ -10582,6 +10582,243 @@
       ]
     },
     {
+      "file": "scenario-requestedRoundKeepsItsOriginTest.itf.json",
+      "kind": "scenario",
+      "scenario": "requestedRoundKeepsItsOriginTest",
+      "states": 21,
+      "steps": [
+        {
+          "index": 0,
+          "action": null,
+          "decision": {
+            "outcome": "refused",
+            "tag": "TicketNotFound"
+          },
+          "tickets": {}
+        },
+        {
+          "index": 1,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketCreated"
+          },
+          "tickets": {
+            "1": "Pending"
+          }
+        },
+        {
+          "index": 2,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketDispatched"
+          },
+          "tickets": {
+            "1": "Work"
+          }
+        },
+        {
+          "index": 3,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketWorkResultAccepted"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 4,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 5,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 6,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationPassed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 7,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationUnavailable"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 8,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationResumed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 9,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsEvaluation"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 10,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 11,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationBlocked"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 12,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationBlocked"
+          },
+          "tickets": {
+            "1": "Escalated"
+          }
+        },
+        {
+          "index": 13,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationResumed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 14,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationResumed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 15,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationProgressed"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 16,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationPassed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 17,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketEvaluationPassed"
+          },
+          "tickets": {
+            "1": "Finalization"
+          }
+        },
+        {
+          "index": 18,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsEvaluation"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 19,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsEvaluation"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        },
+        {
+          "index": 20,
+          "action": null,
+          "decision": {
+            "outcome": "decided",
+            "tag": "TicketFinalizationNeedsEvaluation"
+          },
+          "tickets": {
+            "1": "Evaluation"
+          }
+        }
+      ]
+    },
+    {
       "file": "scenario-failedBasisIsHeldInEveryPartTest.itf.json",
       "kind": "scenario",
       "scenario": "failedBasisIsHeldInEveryPartTest",

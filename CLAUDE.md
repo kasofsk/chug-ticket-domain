@@ -64,7 +64,8 @@ Three pure modules under `src/`, with dependencies pointing one way only —
   rework-vs-escalate choice — is a caller-supplied function, not domain state.
 
 `src/itf.ts` (exported as `@kasofsk/chug-ticket-domain/itf`) decodes ITF trace
-JSON into immutable values without importing Quint or the domain;
+JSON into plain values, importing only `equal` from `task.ts` and neither
+Quint nor the lifecycle;
 `test/conformance/convert.ts` maps those into domain values and `replay.ts`
 reconstructs the command behind each step. `src/testing.ts` holds the fixtures
 and `Driver` that both the domain tests and the replay share; it is published

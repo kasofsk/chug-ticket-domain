@@ -78,7 +78,7 @@ for (const trace of traces)
     });
   });
 test("corpus has complete decision coverage", () => {
-  expect(traces).toHaveLength(81);
+  expect(traces).toHaveLength(82);
   expect(summaries.filter((s) => s.kind === "simulation")).toHaveLength(12);
   expect(
     summaries
@@ -89,7 +89,7 @@ test("corpus has complete decision coverage", () => {
     summaries
       .filter((s) => s.kind === "scenario")
       .reduce((n, s) => n + s.checks, 0),
-  ).toBe(756);
+  ).toBe(776);
   expect(summaries.flatMap((s) => s.evolve)).toHaveLength(101);
   expect(summaries.reduce((n, s) => n + s.restarts, 0)).toBe(12);
   expect(

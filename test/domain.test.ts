@@ -740,6 +740,62 @@ test("a round requested after a resume is the next round and names the generatio
   expect(state_of(driver)).toBeInstanceOf(k.Done);
 });
 
+test("a requested round keeps its origin while it is blocked and when it is resumed", () => {
+  const driver = passed_once();
+  driver.submit(
+    report(1, new k.FinalizationResultUnavailable(t.ContentRef(910))),
+  );
+  driver.submit(new k.ResumeTicket(T1));
+  request(driver, 2, 920);
+  const asked = new e.Requested(t.Generation(2), t.ContentRef(920));
+  pass(driver, 921);
+  driver.submit(b.failure_command(driver.graph, 1, 922, false, true));
+  const blocked = state_of(driver);
+  if (
+    !(blocked instanceof k.Escalated) ||
+    !(blocked.escalation instanceof k.EvaluationBlockedEscalated)
+  )
+    throw new Error("not blocked");
+  expect(blocked.escalation.evaluation.round).toBe(2);
+  expect(blocked.escalation.evaluation.origin).toEqual(asked);
+  driver.submit(new k.ResumeTicket(T1));
+  const resumed = state_of(driver);
+  if (!(resumed instanceof k.Evaluation)) throw new Error("not evaluating");
+  expect(resumed.evaluation.round).toBe(2);
+  expect(resumed.evaluation.origin).toEqual(asked);
+  pass(driver, 923);
+  pass(driver, 924);
+  expect([finalization(driver).round, finalization(driver).generation]).toEqual(
+    [2, 3],
+  );
+  // A third round was asked for by the second round's operation, whose
+  // generation is 2 or later, and never by an earlier one.
+  request(driver, 3, 930);
+  const third = state_of(driver);
+  if (!(third instanceof k.Evaluation)) throw new Error("not evaluating");
+  expect(third.evaluation.round).toBe(3);
+  expect(third.evaluation.origin).toEqual(
+    new e.Requested(t.Generation(3), t.ContentRef(930)),
+  );
+  const reopened = (generation: number) =>
+    valid(
+      driver,
+      new k.Evaluation(
+        new e.EvaluationInstance(
+          third.evaluation.work_cycle,
+          third.evaluation.round,
+          new e.Requested(t.Generation(generation), t.ContentRef(930)),
+          third.evaluation.input,
+          third.evaluation.plan,
+          third.evaluation.state,
+        ),
+      ),
+    );
+  expect(reopened(3)).toBe(true);
+  expect(reopened(2)).toBe(true);
+  expect(reopened(1)).toBe(false);
+});
+
 test("a failed basis is held to its operation in every part", () => {
   const driver = passed_once();
   driver.submit(new k.CreateTicket(b.released(2)));
@@ -779,6 +835,24 @@ test("a failed basis is held to its operation in every part", () => {
       with_state(driver, new k.Finalization(operation), t.TicketId(2), 1),
     ),
   ).toBe(false);
+  // No operation is of a work cycle before the first.
+  expect(
+    k.graph_invariant(
+      with_state(
+        driver,
+        new k.Finalization(
+          operation_with(operation, {
+            work_cycle: 0,
+            round: 1,
+            generation: 1,
+            origin: new e.OpenedByWork(),
+            basis: new k.PassedVerdict(),
+          }),
+        ),
+        t.TicketId(2),
+      ),
+    ),
+  ).toBe(false);
   // The same round still running.
   const running = e.begin(
     failed.work_cycle,
@@ -798,7 +872,7 @@ test("a failed basis is held to its operation in every part", () => {
           failed.round,
           failed.origin,
           failed.input,
-          new e.EvaluationPlan([]),
+          new e.EvaluationPlan([...failed.plan.stages, ...failed.plan.stages]),
           failed.state,
         ),
       ),

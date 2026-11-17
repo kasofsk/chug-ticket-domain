@@ -2018,6 +2018,7 @@ function _finalization_operation_valid(
 ): boolean {
   return (
     o.work_cycle === t.work_cycles_started &&
+    o.work_cycle > 0 &&
     o.input > 0 &&
     o.source > 0 &&
     _finalization_origin_valid(o) &&

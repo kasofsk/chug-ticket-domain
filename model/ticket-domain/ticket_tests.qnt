@@ -2439,6 +2439,63 @@ module ticket_tests {
       .then(check(ticketDone(1)))
   }
 
+  pure def withEvaluationOrigin(
+    candidate: TicketGraph,
+    origin: EvaluationOrigin,
+  ): TicketGraph = match candidate.tickets.get(1).state {
+    | Evaluation(evaluation) => {
+        tickets: candidate.tickets.set(1, {
+          ...candidate.tickets.get(1),
+          state: Evaluation({ ...evaluation, origin: origin }),
+        }),
+      }
+    | _ => candidate
+  }
+
+  // A round keeps the request that opened it while it is blocked and when it
+  // is resumed. A third round was asked for by the second round's operation,
+  // whose generation is 2 or later, and never by an earlier one.
+  run requestedRoundKeepsItsOriginTest = {
+    passedOnce(5900)
+      .then(reportFinalization(1, FinalizationResultUnavailable(5910)))
+      .then(submit(ResumeTicket(1)))
+      .then(requestEvaluation(1, 5920))
+      .then(reportEvaluatorResult(1, 5921, EvaluatorPass))
+      .then(reportEvaluatorUnavailable(1, 5922))
+      .then(check(match graph.tickets.get(1).state {
+        | Escalated(escalation) => match escalation {
+            | EvaluationBlockedEscalated(saved) =>
+                saved.round == 2
+                and saved.origin == Requested({ generation: 2, evidence: 5920 })
+            | _ => false
+          }
+        | _ => false
+      }))
+      .then(submit(ResumeTicket(1)))
+      .then(check(evaluating(1, evaluation =>
+        evaluation.round == 2
+        and evaluation.origin == Requested({ generation: 2, evidence: 5920 }))))
+      .then(reportEvaluatorResult(1, 5923, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 5924, EvaluatorPass))
+      .then(check(finalizing(1, operation =>
+        operation.round == 2 and operation.generation == 3)))
+      .then(requestEvaluation(1, 5930))
+      .then(check(evaluating(1, evaluation =>
+        evaluation.round == 3
+        and evaluation.origin == Requested({ generation: 3, evidence: 5930 }))))
+      .then(check(and {
+        graphInvariant(graph),
+        graphInvariant(withEvaluationOrigin(
+          graph,
+          Requested({ generation: 2, evidence: 5930 }),
+        )),
+        not(graphInvariant(withEvaluationOrigin(
+          graph,
+          Requested({ generation: 1, evidence: 5930 }),
+        ))),
+      }))
+  }
+
   // A failed basis is the evaluation its operation follows in every part: its
   // ticket, work cycle, round, result and source, a valid evaluation, and one
   // that failed.
@@ -2498,6 +2555,21 @@ module ticket_tests {
                       state: Finalization(operation),
                     }),
                   })),
+                  // No operation is of a work cycle before the first.
+                  not(graphInvariant({
+                    tickets: graph.tickets.set(2, {
+                      ...other,
+                      state: Finalization({
+                        workCycle: 0,
+                        round: 1,
+                        generation: 1,
+                        input: operation.input,
+                        source: operation.source,
+                        origin: OpenedByWork,
+                        basis: PassedVerdict,
+                      }),
+                    }),
+                  })),
                   // The same round still running.
                   running.origin == operation.origin,
                   invariant(running),
@@ -2510,7 +2582,10 @@ module ticket_tests {
                     ...operation,
                     basis: FailedVerdict({
                       ...failed,
-                      plan: { ...failed.plan, stages: [] },
+                      plan: {
+                        ...failed.plan,
+                        stages: failed.plan.stages.concat(failed.plan.stages),
+                      },
                     }),
                   }))),
                 }
@@ -2633,15 +2708,39 @@ module ticket_tests {
     },
   }
 
-  // A requested evaluation is the round after its requester's and names the
-  // requester's generation. The operation an evaluation hands over is of the
-  // evaluation's round and the generation after its requester's, and a
-  // resumed one is the generation after the one that escalated. So no
-  // generation of a work cycle is used twice.
+  pure def heldEvaluation(state: TicketState): List[EvaluationInstance] =
+    match state {
+      | Evaluation(evaluation) => [evaluation]
+      | Escalated(escalation) => match escalation {
+          | EvaluationBlockedEscalated(evaluation) => [evaluation]
+          | _ => []
+        }
+      | _ => []
+    }
+
+  // A round keeps its work cycle, number and origin while it runs, when it is
+  // blocked and when it is resumed.
+  pure def roundKept(before: TicketState, after: TicketState): bool = {
+    val was = heldEvaluation(before)
+    val now = heldEvaluation(after)
+    was.length() == 0 or now.length() == 0 or and {
+      now[0].workCycle == was[0].workCycle,
+      now[0].round == was[0].round,
+      now[0].origin == was[0].origin,
+    }
+  }
+
+  // A round is kept as above. A requested evaluation is the round after its
+  // requester's and names the requester's generation. The operation an
+  // evaluation hands over is of the evaluation's round and the generation
+  // after its requester's, and a resumed one is the generation after the one
+  // that escalated. Together they keep a work cycle from using a generation
+  // twice.
   def roundsAndGenerationsContinue = graph.tickets.keys().forall(ticket =>
     not(priorGraph.tickets.keys().contains(ticket)) or {
       val before = priorGraph.tickets.get(ticket).state
-      match graph.tickets.get(ticket).state {
+      roundKept(before, graph.tickets.get(ticket).state)
+      and match graph.tickets.get(ticket).state {
         | Evaluation(evaluation) => match before {
             | Finalization(operation) => and {
                 evaluation.workCycle == operation.workCycle,

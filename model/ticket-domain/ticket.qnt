@@ -1707,6 +1707,7 @@ module ticket_domain {
     operation: FinalizationOperation,
   ): bool =
     operation.workCycle == ticket.workCyclesStarted
+    and operation.workCycle > 0
     and operation.input > 0
     and operation.source > 0
     and finalizationOriginValid(operation)
