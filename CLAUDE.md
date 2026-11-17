@@ -11,15 +11,18 @@ npx vitest run -t "happyPath"  # one test by name (replay names tests after the 
 npm run typecheck              # tsc over src/, test/ and model/*.ts (build config only covers src/)
 npm run build                  # emits dist/ from src/ (also run by `prepare` on install)
 npm run format                 # prettier over src, test, and the config files
+npm run check-model            # the model's own checks (model/ticket-domain/check.sh); needs `quint` on PATH
 npm run export-traces          # regenerate model/ticket-domain/traces/ from the Quint model; needs `quint` on PATH
 ```
 
-Model-level checks, run from `model/ticket-domain/`:
-
-```sh
-quint test ticket_tests.qnt
-quint run --invariant=modelInvariant --max-steps=25 --max-samples=400 ticket_tests.qnt
-```
+`check-model` runs the scenarios, the walk over `step` against
+`modelInvariant`, and the walk over `finalizerStep` from `initFinalizing`
+against the finalizer's invariants, and requires that same run to reach each
+witness (`someFailedBasis` and the rest). Its seeds are pinned, so one tree has
+one verdict; `SEED=0x… npm run check-model` walks elsewhere. A walk over
+`step` seldom reaches Finalization, so a change to what a finalizer can do is
+checked by the second walk or not at all: give it a witness, and a scenario
+that shows the new rule bites.
 
 ## The central rule: the model leads
 
@@ -27,8 +30,9 @@ quint run --invariant=modelInvariant --max-steps=25 --max-samples=400 ticket_tes
 traces are exported from the model into `model/ticket-domain/traces/` and
 replayed against `src/` by `test/conformance/`. **When the two disagree, the
 implementation is wrong.** Any change to lifecycle behaviour goes: edit the
-`.qnt`, add/adjust scenarios and invariants in `ticket_tests.qnt`, run the
-Quint checks, `npm run export-traces`, then change `src/` until replay passes.
+`.qnt`, add/adjust scenarios and invariants in `ticket_tests.qnt`, run
+`npm run check-model`, `npm run export-traces`, then change `src/` until replay
+passes.
 `model/ticket-domain/IMPLEMENTATION_MAP.md` is the name-by-name mapping from
 each model definition to its TypeScript counterpart; keep it current.
 
@@ -43,8 +47,8 @@ Three pure modules under `src/`, with dependencies pointing one way only —
 `ticket` → `evaluation`, `task`; never the reverse:
 
 - `task.ts` — the shared task-contract kernel: branded positive-int identities
-  (`TicketId`, `CycleNumber`, `StageKey`, `Generation`, `EvaluatorKey`,
-  `ContentRef`), `TaskDefinition`/`TaskObligation`/`TaskTerminal`, plus the
+  (`TicketId`, `CycleNumber`, `Round`, `StageKey`, `Generation`,
+  `EvaluatorKey`, `ContentRef`), `TaskDefinition`/`TaskObligation`/`TaskTerminal`, plus the
   structural `equal()` and `repr()` helpers everything else compares with.
   Task terminals are neutral (produced / process failed / execution
   unavailable); pass-fail meaning belongs to the owning protocol.
@@ -60,7 +64,8 @@ Three pure modules under `src/`, with dependencies pointing one way only —
   rework-vs-escalate choice — is a caller-supplied function, not domain state.
 
 `src/itf.ts` (exported as `@kasofsk/chug-ticket-domain/itf`) decodes ITF trace
-JSON into immutable values without importing Quint or the domain;
+JSON into plain values, importing only `equal` from `task.ts` and neither
+Quint nor the lifecycle;
 `test/conformance/convert.ts` maps those into domain values and `replay.ts`
 reconstructs the command behind each step. `src/testing.ts` holds the fixtures
 and `Driver` that both the domain tests and the replay share; it is published
@@ -80,8 +85,9 @@ Every domain value is a frozen class with a literal `readonly kind`
 discriminator and a union type over the variants; collections are copied and
 frozen in the constructor. Model a legal phase as its own variant carrying
 exactly the data valid in that phase rather than a common record with optional
-fields. `int > 0` in the model becomes a positive-checked branded number, so
-the model's positivity predicates live in constructors. Store released inputs
+fields. `int > 0` in the model becomes a branded number. A brand checks
+nothing, so the model's positivity predicates are transcribed where the model
+has them: `validate_command` and the invariants. Store released inputs
 and committed facts; derive readiness, current task identities and other
 deterministic consequences. A refusal is a domain outcome; infrastructure
 inability is not. Function names are `snake_case`.
@@ -95,19 +101,22 @@ inability is not. Function names are `snake_case`.
   step as a decision.
 - A `check(...)` step re-emits the previous decision unchanged. Drive
   simulations from `steps()`, not `decisions()`, which collapses them.
-- 31 of the steps are *evolve-only*: the trace does not determine the command,
-  so only the state assertions run. Their `decide` coverage has to come from
-  direct tests in `test/domain.test.ts`.
+- Some scenario steps are *evolve-only* (`replay.test.ts` pins how many): the
+  trace does not determine the command, so only the state assertions run.
+  Their `decide` coverage has to come from direct tests in
+  `test/domain.test.ts`.
 - Replaying the traces does **not** cover `SelfDependency`,
-  `DependenciesRevoked`, `DependencyCycle`, `TaskNotCurrent` or
-  `FinalizationNotCurrent` reliably: a scenario's refusal is evolve-only, and
-  the simulations reach them only by chance. They need direct `decide` tests.
+  `DependenciesRevoked` or `DependencyCycle` reliably: a scenario's refusal is
+  evolve-only, and the simulations reach them only by chance. They need direct
+  `decide` tests. The finalizer's simulation traces do drive `decide` through
+  `TaskNotCurrent`, `FinalizationNotCurrent`, `FinalizationResultNotAllowed`
+  and `EvaluationNotCurrent`, by its `stray…` steps, whose commands replay
+  rebuilds from the trace's nondeterministic picks. `REQUIRED_FEATURES` in
+  `test/conformance/replay.ts` lists the situations those traces must hold; if
+  a change to the walk loses one, choose seeds in `export_traces.ts` that hold
+  it again.
 - Compare maps and sets by content (`equal` from `task.ts`), never by the order
   a trace file lists them.
-
-Note that `test/conformance/README.md` still refers to the harness files by
-their pre-extraction paths (`tests-ts/…`, `itf.ts` inside the harness); the
-real locations are `test/conformance/` and `src/itf.ts`.
 
 ## Scope guards
 

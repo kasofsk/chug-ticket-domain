@@ -15,15 +15,20 @@ The executable specification is `task-contract/task.qnt`, `ticket-domain/evaluat
 | `finalizationCurrent` | `_finalization_current` in `src/ticket.ts`; guards both the finalization refusal and every finalization `evolve` branch |
 | `EvaluationOrigin` (`OpenedByWork`, `Requested`), `originValid`, `evaluationRequested` | `OpenedByWork`, `Requested`, `origin_valid` in `src/evaluation.ts`; `evaluation_requested` in `src/ticket.ts` |
 | `round` on `EvaluationTaskIdentity`, `EvaluationInstance`, `FinalizationOperation` | the `Round` brand in `src/task.ts`, a `round` field on `EvaluationTaskId`, `EvaluationInstance` and `FinalizationOperation` |
-| `FinalizationBasis` (`PassedVerdict`, `FailedVerdict`, `WithdrawnVerdict`) | Same classes in `src/ticket.ts` |
+| `origin` on `FinalizationOperation`, `finalizationOriginValid` | an `origin` field on `FinalizationOperation`, `_finalization_origin_valid`; the origin of the evaluation the operation follows, kept across a resumed finalization |
+| `FinalizationBasis` (`PassedVerdict`, `FailedVerdict`, `WithdrawnVerdict`) | Same classes in `src/ticket.ts`; only `FailedVerdict` carries a value, the evaluation that failed |
 | `finalizationAfter`, `requestedEvaluation`, `failedBasisEntries` | `finalization_after`, `requested_evaluation`, `failed_basis_entries` |
-| `FinalizationNeedsEvaluation`, `FinalizationFailureStands`, `FinalizationResultNotAllowed` | Same names in `src/ticket.ts`; the `ReportFinalizationResult` branch of `decide` reads the failure policy only for `FinalizationFailureStands` |
-| `TicketEvaluationFailureReturned`, `TicketEvaluationWithdrawn`, `TicketFinalizationNeedsEvaluation`, `TicketFinalizationFailureReworked`, `TicketFinalizationFailureEscalated`, `TicketFinalizationFailureInvalidated` | Same names in `src/ticket.ts` |
+| `FinalizationNeedsEvaluation`, `FinalizationFailureStands`, `FinalizationResultNotAllowed` | Same names in `src/ticket.ts`; the `ReportFinalizationResult` branch of `decide` reads the failure policy only for `FinalizationFailureStands`, where any disposition but rework escalates |
+| `TicketEvaluationFailureReturned`, `TicketEvaluationWithdrawn`, `TicketFinalizationNeedsEvaluation`, `TicketFinalizationFailureReworked`, `TicketFinalizationFailureEscalated` | Same names in `src/ticket.ts` |
+| `revocationAllowed` | `revocation_allowed` in `src/ticket.ts`; a Finalization is revocable on any basis but a pass |
 | `decideInvalidated`, `invalidationCurrent` | inlined in the `InvalidateEvaluation` branch of `decide`, which picks the event by the evaluation's origin |
 | `finalizationOperationValid`, `finalizationBasisValid`, `completionFollowsAPass` | `_finalization_operation_valid`, `_finalization_basis_valid`, `_completion_follows_a_pass` |
+| `obligationAgrees`, `ticketLiveObligations` | `_obligation_agrees`, `_ticket_live_obligations` in `src/ticket.ts`; an `ExecuteTask` is the whole obligation of a task the decision made live, and a `FinalizeTicket` carries the ticket's own configuration |
+| `obligationsComplete`, `obligationsExecute`, `obligationsFinalize` | `_obligations_complete` in `src/ticket.ts`, with the two lookups inlined; a decision obliges every task it makes live and every finalization operation it opens |
+| the `evolved != graph` conjunct of `decisionValid` | `!equal(evolved, g)` in `decision_valid`; a decided event applies where it was decided |
 | `InvalidateEvaluation`, `EvaluationNotCurrent`, `TicketEvaluationInvalidated`, `EvaluationInvalidated`, `invalidatedWorkInput` | Same names in `src/ticket.ts` (`invalidated_work_input`); cancels the live evaluation tasks and never consults the failure policy; an evaluation a work result opened starts a work cycle from the accepted source, a requested one is withdrawn to Finalization |
 | `InvalidateEvaluationFailure(evidence)`, `TicketEvaluationFailureInvalidated` | Same names in `src/ticket.ts`; a failed verdict the policy answers this way is recorded and enters a `EvaluationInvalidated` work cycle instead of a rework or an escalation |
-| `terminalClassEvent`, `orphansCancelled` | `_TERMINAL_EVENTS`, `_orphans_cancelled` in `src/ticket.ts`; a decision that is not a terminal report drops no live task without cancelling it |
+| `reportedTasks`, `orphansCancelled` | `_reported_tasks`, `_orphans_cancelled` in `src/ticket.ts`; a decision drops no live task without cancelling it, but for the task its report was about |
 | `reportAdmissible` | inlined as `task_current(...)` in the evaluation branches of `_evolve` in `src/ticket.ts` |
 
 A released ticket pins its content reference and nothing else about its material: task inputs are `workConfiguration.inputs` and each evaluator's `task.inputs`, so `WorkInput.released` is that one content reference rather than a record.

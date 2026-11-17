@@ -586,7 +586,9 @@ export function plan_valid(plan: EvaluationPlan): boolean {
 export function origin_valid(c: EvaluationInstance): boolean {
   return c.origin instanceof OpenedByWork
     ? c.round === 1
-    : c.round > 1 && c.origin.generation > 0 && c.origin.evidence > 0;
+    : c.round > 1 &&
+        c.origin.generation >= c.round - 1 &&
+        c.origin.evidence > 0;
 }
 export function evaluation_invariant(c: EvaluationInstance): boolean {
   return (

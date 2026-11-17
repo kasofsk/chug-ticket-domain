@@ -1,6 +1,6 @@
 {
   "name": "@kasofsk/chug-ticket-domain",
-  "version": "0.8.0",
+  "version": "0.9.0",
   "description": "The Chuggernaut ticket domain: a Quint model of the ticket lifecycle, the pure TypeScript core refined from it, and the conformance harness that holds the two together.",
   "license": "UNLICENSED",
   "private": false,
@@ -50,6 +50,7 @@
     "prepare": "npm run build",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "test": "vitest run",
+    "check-model": "sh model/ticket-domain/check.sh",
     "export-traces": "node --experimental-strip-types model/ticket-domain/export_traces.ts",
     "format": "prettier --write \"src/*.ts\" \"test/**/*.ts\" package.json tsconfig*.json vitest.config.ts"
   },

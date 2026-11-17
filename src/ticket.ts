@@ -3,6 +3,7 @@ import {
   EvaluationFailed,
   EvaluationInput,
   EvaluationInstance,
+  EvaluationOrigin,
   EvaluationPassed,
   EvaluationPlan,
   EvaluationReworkEntry,
@@ -113,7 +114,7 @@ export class FailedVerdict {
 
 export class WithdrawnVerdict {
   readonly kind = "WithdrawnVerdict";
-  constructor(readonly evidence: ContentRef) {
+  constructor() {
     Object.freeze(this);
   }
 }
@@ -129,6 +130,7 @@ export class FinalizationOperation {
     readonly generation: Generation,
     readonly input: ContentRef,
     readonly source: ContentRef,
+    readonly origin: EvaluationOrigin,
     readonly basis: FinalizationBasis,
   ) {
     Object.freeze(this);
@@ -921,19 +923,6 @@ export class TicketFinalizationFailureEscalated {
   }
 }
 
-export class TicketFinalizationFailureInvalidated {
-  readonly kind = "TicketFinalizationFailureInvalidated";
-  constructor(
-    readonly ticket: TicketId,
-    readonly work_cycle: CycleNumber,
-    readonly generation: Generation,
-    readonly evidence: ContentRef,
-    readonly invalidation: ContentRef,
-  ) {
-    Object.freeze(this);
-  }
-}
-
 export class TicketFinalizationSucceeded {
   readonly kind = "TicketFinalizationSucceeded";
   constructor(
@@ -995,8 +984,7 @@ export type TicketEvent =
   | TicketFinalizationUnavailable
   | TicketFinalizationNeedsEvaluation
   | TicketFinalizationFailureReworked
-  | TicketFinalizationFailureEscalated
-  | TicketFinalizationFailureInvalidated;
+  | TicketFinalizationFailureEscalated;
 
 export class ExecuteTask {
   readonly kind = "ExecuteTask";
@@ -1200,6 +1188,7 @@ export function resumed_finalization(
     Generation(o.generation + 1),
     o.input,
     o.source,
+    o.origin,
     o.basis,
   );
 }
@@ -1216,6 +1205,7 @@ export function finalization_after(
     Generation(e.origin instanceof Requested ? e.origin.generation + 1 : 1),
     e.input.work_result,
     e.input.accepted_source_ref,
+    e.origin,
     basis,
   );
 }
@@ -1272,11 +1262,9 @@ export function is_ready(g: TicketGraph, id: TicketId): boolean {
   return t !== undefined && is_pending(t.state) && dependencies_complete(g, t);
 }
 export function revocation_allowed(s: TicketState): boolean {
-  return !(
-    s instanceof Finalization ||
-    s instanceof Done ||
-    s instanceof Revoked
-  );
+  if (s instanceof Finalization)
+    return !(s.operation.basis instanceof PassedVerdict);
+  return !(s instanceof Done || s instanceof Revoked);
 }
 export function live_task_list(t: Ticket): readonly TaskId[] {
   return t.state instanceof Work
@@ -1391,10 +1379,7 @@ export function decide(
         new TicketEvaluationWithdrawn(id, c.work_cycle, c.round, c.evidence),
         [
           ...cancel_live_tasks(t),
-          finalize(
-            t,
-            finalization_after(evaluation, new WithdrawnVerdict(c.evidence)),
-          ),
+          finalize(t, finalization_after(evaluation, new WithdrawnVerdict())),
         ],
       );
     return decided(
@@ -1475,17 +1460,8 @@ export function decide(
       );
     if (r.result instanceof FinalizationFailureStands) {
       if (!(operation.basis instanceof FailedVerdict)) return not_allowed;
-      const disposition = policy(operation.basis.evaluation);
-      if (disposition instanceof EscalateEvaluationFailure)
-        return decided(
-          new TicketFinalizationFailureEscalated(
-            id,
-            r.work_cycle,
-            r.generation,
-            evidence,
-          ),
-        );
-      return disposition instanceof ReworkEvaluationFailure
+      return policy(operation.basis.evaluation) instanceof
+        ReworkEvaluationFailure
         ? decided(
             new TicketFinalizationFailureReworked(
               id,
@@ -1506,21 +1482,12 @@ export function decide(
             ],
           )
         : decided(
-            new TicketFinalizationFailureInvalidated(
+            new TicketFinalizationFailureEscalated(
               id,
               r.work_cycle,
               r.generation,
               evidence,
-              disposition.evidence,
             ),
-            [
-              execute_work(
-                t,
-                next_cycle_number(t),
-                operation.source,
-                invalidated_work_input(t.definition, disposition.evidence),
-              ),
-            ],
           );
     }
     if (
@@ -1750,7 +1717,7 @@ function _evolve(g: TicketGraph, f: TicketEvent): TicketGraph | null {
       evaluation_requested(evaluation)
       ? put(
           new Finalization(
-            finalization_after(evaluation, new WithdrawnVerdict(f.evidence)),
+            finalization_after(evaluation, new WithdrawnVerdict()),
           ),
         )
       : null;
@@ -1845,8 +1812,7 @@ function _evolve(g: TicketGraph, f: TicketEvent): TicketGraph | null {
     f instanceof TicketFinalizationUnavailable ||
     f instanceof TicketFinalizationNeedsEvaluation ||
     f instanceof TicketFinalizationFailureReworked ||
-    f instanceof TicketFinalizationFailureEscalated ||
-    f instanceof TicketFinalizationFailureInvalidated
+    f instanceof TicketFinalizationFailureEscalated
   ) {
     if (
       !(s instanceof Finalization) ||
@@ -1860,8 +1826,7 @@ function _evolve(g: TicketGraph, f: TicketEvent): TicketGraph | null {
       );
     if (
       f instanceof TicketFinalizationFailureReworked ||
-      f instanceof TicketFinalizationFailureEscalated ||
-      f instanceof TicketFinalizationFailureInvalidated
+      f instanceof TicketFinalizationFailureEscalated
     ) {
       if (!(basis instanceof FailedVerdict)) return null;
       if (f instanceof TicketFinalizationFailureEscalated)
@@ -1878,9 +1843,7 @@ function _evolve(g: TicketGraph, f: TicketEvent): TicketGraph | null {
       return _enter_work_cycle(
         g,
         t,
-        f instanceof TicketFinalizationFailureReworked
-          ? evaluation_rework_input(t.definition, failed_basis_entries(basis))
-          : invalidated_work_input(t.definition, f.invalidation),
+        evaluation_rework_input(t.definition, failed_basis_entries(basis)),
         s.operation.source,
       );
     }
@@ -2026,8 +1989,7 @@ function _finalization_basis_valid(
 ): boolean {
   const basis = o.basis;
   if (basis instanceof PassedVerdict) return true;
-  if (basis instanceof WithdrawnVerdict)
-    return o.round > 1 && basis.evidence > 0;
+  if (basis instanceof WithdrawnVerdict) return o.round > 1;
   const e = basis.evaluation;
   return (
     evaluation_invariant(e) &&
@@ -2035,10 +1997,20 @@ function _finalization_basis_valid(
     e.input.ticket === t.definition.id &&
     e.work_cycle === o.work_cycle &&
     e.round === o.round &&
+    equal(e.origin, o.origin) &&
     e.input.work_result === o.input &&
     e.input.accepted_source_ref === o.source &&
     failed_basis_entries(basis).length > 0
   );
+}
+function _finalization_origin_valid(o: FinalizationOperation): boolean {
+  const origin = o.origin;
+  return origin instanceof Requested
+    ? o.round > 1 &&
+        origin.generation >= o.round - 1 &&
+        origin.generation < o.generation &&
+        origin.evidence > 0
+    : o.round === 1 && o.generation > 0;
 }
 function _finalization_operation_valid(
   t: Ticket,
@@ -2046,10 +2018,10 @@ function _finalization_operation_valid(
 ): boolean {
   return (
     o.work_cycle === t.work_cycles_started &&
-    o.round > 0 &&
-    o.generation >= o.round &&
+    o.work_cycle > 0 &&
     o.input > 0 &&
     o.source > 0 &&
+    _finalization_origin_valid(o) &&
     _finalization_basis_valid(t, o)
   );
 }
@@ -2117,20 +2089,48 @@ function _obligation_valid(o: Obligation): boolean {
     f.source > 0
   );
 }
+function _ticket_live_obligations(
+  g: TicketGraph,
+  id: TicketId,
+): readonly TaskObligation[] {
+  const t = g.tickets.get(id);
+  if (!t) return [];
+  if (t.state instanceof Work)
+    return [
+      work_task_obligation(
+        t,
+        CycleNumber(t.work_cycles_started),
+        t.state.execution.source,
+        t.state.execution.input,
+      ),
+    ];
+  return t.state instanceof Evaluation
+    ? current_task_obligations(t.state.evaluation)
+    : [];
+}
 function _obligation_agrees(
   prior: TicketGraph,
   evolved: TicketGraph,
   o: Obligation,
 ): boolean {
   if (o instanceof ExecuteTask)
-    return list_has_task(ticket_live_tasks(evolved, o.ticket), o.task.task);
+    return (
+      _ticket_live_obligations(evolved, o.ticket).some((live) =>
+        equal(live, o.task),
+      ) && !list_has_task(ticket_live_tasks(prior, o.ticket), o.task.task)
+    );
   if (o instanceof CancelTask)
     return (
       list_has_task(ticket_live_tasks(prior, o.ticket), o.task) &&
       !list_has_task(ticket_live_tasks(evolved, o.ticket), o.task)
     );
-  const s = evolved.tickets.get(o.ticket)?.state;
-  return s instanceof Finalization && equal(s.operation, o.finalization);
+  const t = evolved.tickets.get(o.ticket);
+  return (
+    t !== undefined &&
+    o.configuration === t.definition.finalization_configuration &&
+    t.state instanceof Finalization &&
+    equal(t.state.operation, o.finalization)
+  );
 }
 function _reported_tasks(f: TicketEvent): readonly TaskId[] {
   if (
@@ -2171,6 +2171,40 @@ function _orphans_cancelled(
     );
   });
 }
+function _obligations_complete(
+  prior: TicketGraph,
+  evolved: TicketGraph,
+  obligations: readonly Obligation[],
+): boolean {
+  return [...evolved.tickets].every(([id, t]) => {
+    const before = ticket_live_tasks(prior, id);
+    if (
+      !live_task_list(t).every(
+        (task) =>
+          list_has_task(before, task) ||
+          obligations.some(
+            (o) =>
+              o instanceof ExecuteTask &&
+              o.ticket === id &&
+              equal(o.task.task, task),
+          ),
+      )
+    )
+      return false;
+    if (!(t.state instanceof Finalization)) return true;
+    const operation = t.state.operation,
+      held = prior.tickets.get(id)?.state;
+    return (
+      (held instanceof Finalization && equal(held.operation, operation)) ||
+      obligations.some(
+        (o) =>
+          o instanceof FinalizeTicket &&
+          o.ticket === id &&
+          equal(o.finalization, operation),
+      )
+    );
+  });
+}
 function _completion_follows_a_pass(g: TicketGraph, f: TicketEvent): boolean {
   if (!(f instanceof TicketFinalizationSucceeded)) return true;
   const s = g.tickets.get(f.ticket)?.state;
@@ -2182,6 +2216,8 @@ export function decision_valid(g: TicketGraph, d: TicketDecision): boolean {
   if (d instanceof TicketRefused) return equal(apply_decision(g, d), g);
   const evolved = evolve(g, d.event);
   return (
+    !equal(evolved, g) &&
+    _obligations_complete(g, evolved, d.obligations) &&
     _orphans_cancelled(g, evolved, d.event, d.obligations) &&
     _completion_follows_a_pass(g, d.event) &&
     d.obligations.every(

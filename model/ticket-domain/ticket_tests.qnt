@@ -1424,6 +1424,7 @@ module ticket_tests {
     passedOnce(3000)
       .then(check(finalizing(1, operation =>
         operation.round == 1 and operation.generation == 1
+        and operation.origin == OpenedByWork
         and operation.basis == PassedVerdict)))
       .then(requestEvaluation(1, 3010))
       .then(check(decisionInvariant))
@@ -1454,6 +1455,7 @@ module ticket_tests {
         generation: 2,
         input: 3000,
         source: 3090,
+        origin: Requested({ generation: 1, evidence: 3010 }),
         basis: PassedVerdict,
       }]))
       .then(reportFinalization(1, FinalizationSucceeded(3020)))
@@ -1527,6 +1529,7 @@ module ticket_tests {
       .then(check(graph.tickets.get(1).workCyclesStarted == 1))
       .then(check(finalizing(1, operation =>
         operation.round == 2 and operation.generation == 2
+        and operation.origin == Requested({ generation: 1, evidence: 3310 })
         and basisFailed(operation)
         and failedBasisEntries(operation.basis)
           == [{ evaluator: 11, resultRef: 3311 }])))
@@ -1616,7 +1619,9 @@ module ticket_tests {
       .then(check(workReworkRefs(1) == [{ evaluator: 11, resultRef: 3711 }]))
   }
 
-  run failedVerdictThatStandsMayBeInvalidatedByThePolicyTest = {
+  // A failure that stands is the ticket's own, so the policy that would
+  // invalidate it escalates instead and no work cycle starts.
+  run failedVerdictThatStandsIsNeverInvalidatedTest = {
     failedTwice(3800)
       .then(reportFinalizationWithPolicy(
         1,
@@ -1624,9 +1629,18 @@ module ticket_tests {
         invalidatePolicy,
       ))
       .then(check(decisionInvariant))
-      .then(check(ticketWorkCycle(1, 2)))
-      .then(check(workInvalidatedWith(1, 1601)))
-      .then(check(workUsesSource(1, 3890)))
+      .then(check(decidedEvent == TicketFinalizationFailureEscalated({
+        ticket: 1,
+        workCycle: 1,
+        generation: 2,
+        evidence: 3820,
+      })))
+      .then(check(graph.tickets.get(1).workCyclesStarted == 1))
+      .then(check(escalatedWith(1, escalation => escalation ==
+        EvaluationFailureEscalated({
+          evidence: [{ evaluator: 11, resultRef: 3811 }],
+          source: 3890,
+        }))))
   }
 
   run failureStandsIsRefusedWithoutAFailedVerdictTest = {
@@ -1649,13 +1663,6 @@ module ticket_tests {
         workCycle: 1,
         generation: 1,
         evidence: 3920,
-      })) == graph))
-      .then(check(evolve(graph, TicketFinalizationFailureInvalidated({
-        ticket: 1,
-        workCycle: 1,
-        generation: 1,
-        evidence: 3920,
-        invalidation: 3921,
       })) == graph))
   }
 
@@ -1716,7 +1723,12 @@ module ticket_tests {
       .then(check(graph.tickets.get(1).workCyclesStarted == 1))
       .then(check(finalizing(1, operation =>
         operation.round == 2 and operation.generation == 2
-        and operation.basis == WithdrawnVerdict(4220))))
+        and operation.origin == Requested({ generation: 1, evidence: 4210 })
+        and operation.basis == WithdrawnVerdict)))
+      .then(check(match graph.tickets.get(1).state {
+        | Finalization(operation) => decidedFinalizations == [operation]
+        | _ => false
+      }))
       .then(reportFinalization(1, FinalizationSucceeded(4230)))
       .then(check(lastDecision == TicketRefused(FinalizationResultNotAllowed({
         ticket: 1,
@@ -1805,25 +1817,822 @@ module ticket_tests {
       .then(check(decidedCancels == []))
       .then(check(finalizing(1, operation =>
         operation.round == 2 and operation.generation == 2
-        and operation.basis == WithdrawnVerdict(4420))))
+        and operation.basis == WithdrawnVerdict)))
+      .then(check(match graph.tickets.get(1).state {
+        | Finalization(operation) => decidedFinalizations == [operation]
+        | _ => false
+      }))
   }
 
-  // Finalization cannot be revoked, so a ticket waiting there leaves by its
-  // finalizer reporting that it cannot proceed.
-  run waitingFinalizationLeavesThroughUnavailableTest = {
-    failedTwice(4500)
+  // A finalization on a passed basis may be completing, so it cannot be
+  // revoked and a ticket waiting there leaves by its finalizer reporting that
+  // it cannot proceed.
+  run passedFinalizationLeavesThroughUnavailableTest = {
+    passedOnce(4500)
+      .then(requestEvaluation(1, 4510))
+      .then(reportEvaluatorResult(1, 4511, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 4512, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 4513, EvaluatorPass))
       .then(submit(RevokeTicket(1)))
       .then(check(lastDecision == TicketRefused(TicketNotRevocable(1))))
+      .then(check(evolve(graph, TicketRevoked(1)) == graph))
       .then(reportFinalization(1, FinalizationResultUnavailable(4520)))
       .then(check(decisionInvariant))
       .then(check(isEscalated(graph.tickets.get(1).state)))
       .then(submit(ResumeTicket(1)))
       .then(check(finalizing(1, operation =>
         operation.round == 2 and operation.generation == 3
-        and basisFailed(operation))))
+        and operation.origin == Requested({ generation: 1, evidence: 4510 })
+        and operation.basis == PassedVerdict)))
       .then(reportFinalization(1, FinalizationResultUnavailable(4521)))
       .then(submit(RevokeTicket(1)))
       .then(check(graph.tickets.get(1).state == Revoked))
+  }
+
+  // An operation that resumes is the one that escalated: its basis is still a
+  // failure, so it still cannot complete and the failure may still stand.
+  run failedBasisSurvivesAFinalizationEscalationTest = {
+    failedTwice(4550)
+      .then(reportFinalization(1, FinalizationResultUnavailable(4570)))
+      .then(check(decisionInvariant))
+      .then(submit(ResumeTicket(1)))
+      .then(check(decisionInvariant))
+      .then(check(finalizing(1, operation =>
+        operation.round == 2 and operation.generation == 3
+        and operation.origin == Requested({ generation: 1, evidence: 4560 })
+        and basisFailed(operation)
+        and failedBasisEntries(operation.basis)
+          == [{ evaluator: 11, resultRef: 4561 }])))
+      .then(reportFinalization(1, FinalizationSucceeded(4571)))
+      .then(check(lastDecision == TicketRefused(FinalizationResultNotAllowed({
+        ticket: 1,
+        workCycle: 1,
+        generation: 3,
+      }))))
+      .then(reportFinalization(1, FinalizationFailureStands(4572)))
+      .then(check(ticketWorkCycle(1, 2)))
+      .then(check(workReworkRefs(1) == [{ evaluator: 11, resultRef: 4561 }]))
+  }
+
+  // No finalization completes on a failed basis, so nothing is being
+  // finalized and the ticket may be revoked where it waits.
+  run failedFinalizationMayBeRevokedTest = {
+    failedTwice(4600)
+      .then(submit(RevokeTicket(1)))
+      .then(check(decisionInvariant))
+      .then(check(lastDecision == TicketDecided({
+        event: TicketRevoked(1),
+        obligations: [],
+      })))
+      .then(check(graph.tickets.get(1).state == Revoked))
+      .then(submit(ReportFinalizationResult({
+        ticket: 1,
+        workCycle: 1,
+        generation: 2,
+        result: FinalizationNeedsEvaluation(4620),
+      })))
+      .then(check(lastDecision == TicketRefused(FinalizationNotCurrent({
+        ticket: 1,
+        workCycle: 1,
+        generation: 2,
+      }))))
+  }
+
+  run withdrawnFinalizationMayBeRevokedTest = {
+    passedOnce(4700)
+      .then(requestEvaluation(1, 4710))
+      .then(invalidateEvaluation(1, 4720))
+      .then(check(finalizing(1, operation =>
+        operation.basis == WithdrawnVerdict)))
+      .then(submit(RevokeTicket(1)))
+      .then(check(decisionInvariant))
+      .then(check(graph.tickets.get(1).state == Revoked))
+  }
+
+  // A report for an operation that is not the current one is refused as not
+  // current whatever it says, before its result is judged against the basis.
+  pure def firstOperationReport(result: FinalizationResult): TicketCommand =
+    ReportFinalizationResult({
+      ticket: 1,
+      workCycle: 1,
+      generation: 1,
+      result: result,
+    })
+
+  run staleFinalizationReportIsRefusedBeforeItsResultIsJudgedTest = {
+    val refusal = TicketRefused(FinalizationNotCurrent({
+      ticket: 1,
+      workCycle: 1,
+      generation: 1,
+    }))
+    failedTwice(4800)
+      .then(submit(firstOperationReport(FinalizationSucceeded(4820))))
+      .then(check(lastDecision == refusal))
+      .then(submit(firstOperationReport(FinalizationFailureStands(4821))))
+      .then(check(lastDecision == refusal))
+      .then(requestEvaluation(1, 4830))
+      .then(invalidateEvaluation(1, 4831))
+      .then(submit(firstOperationReport(FinalizationFailureStands(4832))))
+      .then(check(lastDecision == refusal))
+  }
+
+  // `evolve` applies an event only in the state `decide` produces it from: a
+  // requested evaluation's failure is never disposed by the events of a
+  // work-opened one, and no finalization completes on a withdrawn basis.
+  run finalizationEventsApplyOnlyWhereDecidedTest = {
+    val succeeded = TicketFinalizationSucceeded({
+      ticket: 1,
+      workCycle: 1,
+      generation: 2,
+      evidence: 4920,
+    })
+    passedOnce(4900)
+      .then(requestEvaluation(1, 4910))
+      .then(reportEvaluatorResult(1, 4911, EvaluatorPass))
+      .then(check(match graph.tickets.get(1).state {
+        | Evaluation(evaluation) => {
+            val report =
+              currentEvaluatorReport(1, evaluation, 4912, EvaluatorFail)
+            val entries = [{ evaluator: 12, resultRef: 4912 }]
+            evolve(graph, TicketEvaluationFailureEscalated({
+              ticket: 1,
+              report: report,
+              evidence: entries,
+            })) == graph
+            and evolve(graph, TicketEvaluationFailureInvalidated({
+              ticket: 1,
+              report: report,
+              evidence: 4913,
+            })) == graph
+            and evolve(graph, TicketEvaluationReworkStarted({
+              ticket: 1,
+              report: report,
+              evidence: entries,
+            })) == graph
+            and evolve(graph, TicketEvaluationFailureReturned({
+              ticket: 1,
+              report: report,
+            })) != graph
+          }
+        | _ => false
+      }))
+      .then(invalidateEvaluation(1, 4915))
+      .then(check(finalizing(1, operation =>
+        operation.generation == 2 and operation.basis == WithdrawnVerdict)))
+      .then(check(evolve(graph, succeeded) == graph))
+      .then(check(not(decisionValid(graph, TicketDecided({
+        event: succeeded,
+        obligations: [],
+      })))))
+  }
+
+  // A work-opened evaluation's failure never returns to a finalizer, and a
+  // blocked requested evaluation is never invalidated back to Work.
+  run evaluationEventsDoNotCrossOriginsTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(reportWorkResult(1, 5000))
+      .then(reportEvaluatorResult(1, 5001, EvaluatorPass))
+      .then(check(match graph.tickets.get(1).state {
+        | Evaluation(evaluation) =>
+            evolve(graph, TicketEvaluationFailureReturned({
+              ticket: 1,
+              report: currentEvaluatorReport(1, evaluation, 5002, EvaluatorFail),
+            })) == graph
+        | _ => false
+      }))
+      .then(reportEvaluatorResult(1, 5003, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 5004, EvaluatorPass))
+      .then(requestEvaluation(1, 5010))
+      .then(reportEvaluatorResult(1, 5011, EvaluatorPass))
+      .then(reportEvaluatorUnavailable(1, 5012))
+      .then(check(isEscalated(graph.tickets.get(1).state)))
+      .then(check(evolve(graph, TicketEvaluationInvalidated({
+        ticket: 1,
+        workCycle: 1,
+        evidence: 5013,
+      })) == graph))
+  }
+
+  // Every round continues the cycle's count, so an operation is current, and
+  // completes, however many evaluations were requested before it.
+  run finalizationCompletesAfterManyRequestedEvaluationsTest = {
+    passedOnce(5100)
+      .then(requestEvaluation(1, 5110))
+      .then(reportEvaluatorResult(1, 5111, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 5112, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 5113, EvaluatorPass))
+      .then(requestEvaluation(1, 5120))
+      .then(reportEvaluatorResult(1, 5121, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 5122, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 5123, EvaluatorPass))
+      .then(requestEvaluation(1, 5130))
+      .then(reportEvaluatorResult(1, 5131, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 5132, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 5133, EvaluatorPass))
+      .then(requestEvaluation(1, 5140))
+      .then(reportEvaluatorResult(1, 5141, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 5142, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 5143, EvaluatorPass))
+      .then(check(finalizing(1, operation =>
+        operation.round == 5 and operation.generation == 5
+        and operation.origin == Requested({ generation: 4, evidence: 5140 }))))
+      .then(reportFinalization(1, FinalizationSucceeded(5150)))
+      .then(check(decisionInvariant))
+      .then(check(ticketDone(1)))
+  }
+
+  // A work cycle's operations are numbered from 1 again, so a report is
+  // current only for its own cycle as well as its own generation.
+  run finalizationReportFromAnEarlierWorkCycleIsRefusedTest = {
+    val late = ReportFinalizationResult({
+      ticket: 1,
+      workCycle: 1,
+      generation: 1,
+      result: FinalizationSucceeded(5220),
+    })
+    passedOnce(5200)
+      .then(reportFinalization(1, FinalizationNeedsWork(5210)))
+      // The new cycle starts from the source the result was accepted at, not
+      // from the result.
+      .then(check(match graph.tickets.get(1).state {
+        | Work(work) => work.source == 5290
+        | _ => false
+      }))
+      .then(reportWorkResult(1, 5211))
+      .then(reportEvaluatorResult(1, 5212, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 5213, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 5214, EvaluatorPass))
+      .then(check(finalizing(1, operation =>
+        operation.workCycle == 2 and operation.generation == 1)))
+      .then(submit(late))
+      .then(check(lastDecision == TicketRefused(FinalizationNotCurrent({
+        ticket: 1,
+        workCycle: 1,
+        generation: 1,
+      }))))
+      .then(check(evolve(graph, TicketFinalizationSucceeded({
+        ticket: 1,
+        workCycle: 1,
+        generation: 1,
+        evidence: 5220,
+      })) == graph))
+      .then(reportFinalization(1, FinalizationSucceeded(5221)))
+      .then(check(ticketDone(1)))
+  }
+
+  pure def decisionEvent(decision: TicketDecision): TicketEvent =
+    match decision {
+      | TicketDecided(success) => success.event
+      | TicketRefused(_) => TicketRevoked(0)
+    }
+
+  pure def decisionObligations(decision: TicketDecision): List[Obligation] =
+    match decision {
+      | TicketDecided(success) => success.obligations
+      | TicketRefused(_) => []
+    }
+
+  pure def withObligations(
+    decision: TicketDecision,
+    obligations: List[Obligation],
+  ): TicketDecision = TicketDecided({
+    event: decisionEvent(decision),
+    obligations: obligations,
+  })
+
+  // A decision is valid only with every obligation it owes and none it does
+  // not: each task it starts, whole, and each finalization it opens.
+  run decisionOwesExactlyWhatItStartsTest = {
+    passedOnce(5300)
+      .then(check({
+        val request = decide(graph, ReportFinalizationResult({
+          ticket: 1,
+          workCycle: 1,
+          generation: 1,
+          result: FinalizationNeedsEvaluation(5310),
+        }), reworkPolicy)
+        val owed = decisionObligations(request)
+        and {
+          owed.length() == 2,
+          decisionValid(graph, request),
+          not(decisionValid(graph, withObligations(request, []))),
+          not(decisionValid(graph, withObligations(request, [owed[0]]))),
+          not(decisionValid(graph, withObligations(request, [
+            owed[0],
+            owed[1],
+            owed[1],
+          ]))),
+          not(decisionValid(graph, withObligations(request, [
+            owed[0],
+            match owed[1] {
+              | ExecuteTask(execution) => ExecuteTask({
+                  ...execution,
+                  task: {
+                    ...execution.task,
+                    contextRef: execution.task.contextRef + 1,
+                  },
+                })
+              | _ => owed[1]
+            },
+          ]))),
+          // An event that does not apply where it is decided is no decision.
+          not(decisionValid(graph, TicketDecided({
+            event: TicketFinalizationNeedsWork({
+              ticket: 1,
+              workCycle: 1,
+              generation: 2,
+              evidence: 5311,
+            }),
+            obligations: [],
+          }))),
+        }
+      }))
+      .then(requestEvaluation(1, 5310))
+      .then(check(match graph.tickets.get(1).state {
+        | Evaluation(evaluation) => {
+            val progress = decide(graph, ReportTaskTerminal(
+              currentEvaluatorReport(1, evaluation, 5311, EvaluatorPass),
+            ), reworkPolicy)
+            val waiting = currentTaskObligations(evaluation)[1]
+            and {
+              decisionValid(graph, progress),
+              decisionObligations(progress) == [],
+              // The other evaluator is still awaited, so it is not started again.
+              not(decisionValid(graph, withObligations(progress, [
+                ExecuteTask({ ticket: 1, task: waiting }),
+              ]))),
+            }
+          }
+        | _ => false
+      }))
+      .then(check(match graph.tickets.get(1).state {
+        | Evaluation(evaluation) => {
+            val withdrawal = decide(graph, InvalidateEvaluation({
+              ticket: 1,
+              workCycle: 1,
+              round: 2,
+              evidence: 5312,
+            }), reworkPolicy)
+            val owed = decisionObligations(withdrawal)
+            and {
+              owed.length() == 3,
+              decisionValid(graph, withdrawal),
+              not(decisionValid(graph, withObligations(withdrawal, [
+                owed[0],
+                owed[1],
+              ]))),
+              // Nor one more finalization than the one the ticket entered.
+              not(decisionValid(graph, withObligations(withdrawal, [
+                owed[0],
+                owed[1],
+                owed[2],
+                match owed[2] {
+                  | FinalizeTicket(request) => FinalizeTicket({
+                      ...request,
+                      finalization: {
+                        ...request.finalization,
+                        generation: request.finalization.generation + 1,
+                      },
+                    })
+                  | _ => owed[2]
+                },
+              ]))),
+              not(decisionValid(graph, withObligations(withdrawal, [
+                owed[0],
+                owed[1],
+                match owed[2] {
+                  | FinalizeTicket(request) => FinalizeTicket({
+                      ...request,
+                      configuration: request.configuration + 1,
+                    })
+                  | _ => owed[2]
+                },
+              ]))),
+            }
+          }
+        | _ => false
+      }))
+  }
+
+  pure def withOperation(
+    candidate: TicketGraph,
+    operation: FinalizationOperation,
+  ): TicketGraph = {
+    tickets: candidate.tickets.set(1, {
+      ...candidate.tickets.get(1),
+      state: Finalization(operation),
+    }),
+  }
+
+  // The invariant holds an operation to the evaluation it follows: its origin
+  // to its round, an earlier operation as its requester, and a failed basis
+  // to the very evaluation that failed.
+  run finalizationOperationIsHeldToItsEvaluationTest = {
+    failedTwice(5400)
+      .then(check(match graph.tickets.get(1).state {
+        | Finalization(operation) => {
+            val other = Requested({ generation: 1, evidence: 5499 })
+            and {
+              graphInvariant(graph),
+              not(graphInvariant(withOperation(graph, {
+                ...operation,
+                origin: OpenedByWork,
+              }))),
+              not(graphInvariant(withOperation(graph, {
+                ...operation,
+                origin: Requested({ generation: 2, evidence: 5410 }),
+              }))),
+              not(graphInvariant(withOperation(graph, {
+                ...operation,
+                origin: other,
+              }))),
+              // On a passed basis nothing but the origin's own rules can
+              // reject these: round 2 was not opened by work, and no request
+              // comes from the operation it produced.
+              graphInvariant(withOperation(graph, {
+                ...operation,
+                basis: PassedVerdict,
+              })),
+              not(graphInvariant(withOperation(graph, {
+                ...operation,
+                origin: OpenedByWork,
+                basis: PassedVerdict,
+              }))),
+              not(graphInvariant(withOperation(graph, {
+                ...operation,
+                origin: Requested({ generation: 2, evidence: 5410 }),
+                basis: PassedVerdict,
+              }))),
+              // A request carries evidence, comes from the round before, and
+              // the first operation of a cycle is generation 1 or later.
+              not(graphInvariant(withOperation(graph, {
+                ...operation,
+                origin: Requested({ generation: 1, evidence: 0 }),
+                basis: PassedVerdict,
+              }))),
+              not(graphInvariant(withOperation(graph, {
+                ...operation,
+                round: 3,
+                generation: 4,
+                basis: PassedVerdict,
+              }))),
+              graphInvariant(withOperation(graph, {
+                ...operation,
+                round: 1,
+                generation: 1,
+                origin: OpenedByWork,
+                basis: PassedVerdict,
+              })),
+              not(graphInvariant(withOperation(graph, {
+                ...operation,
+                round: 1,
+                generation: 0,
+                origin: OpenedByWork,
+                basis: PassedVerdict,
+              }))),
+              // An operation is of the ticket's current work cycle.
+              not(graphInvariant(withOperation(graph, {
+                ...operation,
+                workCycle: 2,
+                basis: PassedVerdict,
+              }))),
+              graphInvariant(withOperation(graph, {
+                ...operation,
+                basis: WithdrawnVerdict,
+              })),
+              not(graphInvariant(withOperation(graph, {
+                ...operation,
+                round: 1,
+                origin: OpenedByWork,
+                basis: WithdrawnVerdict,
+              }))),
+              not(graphInvariant(withOperation(graph, {
+                ...operation,
+                round: 1,
+                basis: PassedVerdict,
+              }))),
+              not(completionFollowsAPass(graph, TicketFinalizationSucceeded({
+                ticket: 1,
+                workCycle: 1,
+                generation: 2,
+                evidence: 5420,
+              }))),
+              completionFollowsAPass(
+                withOperation(graph, { ...operation, basis: PassedVerdict }),
+                TicketFinalizationSucceeded({
+                  ticket: 1,
+                  workCycle: 1,
+                  generation: 2,
+                  evidence: 5420,
+                }),
+              ),
+            }
+          }
+        | _ => false
+      }))
+  }
+
+  // A ticket waiting with its finalizer owes nothing new when another ticket
+  // is decided.
+  run anotherTicketIsDecidedWhileOneFinalizesTest = {
+    passedOnce(5500)
+      .then(submit(CreateTicket(released(3, Set()))))
+      .then(check(decisionInvariant))
+      .then(submit(CreateTicket(released(2, Set(1)))))
+      .then(check(decisionInvariant))
+      .then(submit(dispatch(3)))
+      .then(check(decisionInvariant))
+      .then(reportWorkResult(3, 5510))
+      .then(check(decisionInvariant))
+      .then(submit(RevokeTicket(3)))
+      .then(check(decisionInvariant))
+      .then(check(ticketFinalizing(1)))
+  }
+
+  // Generations count a work cycle's operations and rounds its evaluations,
+  // so they part at a resumed finalization. The round requested from one is
+  // still the next round, it names the generation that asked, and the
+  // operation after it is the generation after that.
+  run requestedRoundAfterAResumeTest = {
+    val late = ReportFinalizationResult({
+      ticket: 1,
+      workCycle: 1,
+      generation: 2,
+      result: FinalizationSucceeded(5630),
+    })
+    passedOnce(5600)
+      .then(reportFinalization(1, FinalizationResultUnavailable(5610)))
+      .then(check(match graph.tickets.get(1).state {
+        | Escalated(escalation) => match escalation {
+            | FinalizationUnavailableEscalated(failure) =>
+                graphInvariant(graph)
+                // An escalated finalization is held to the same rules.
+                and not(graphInvariant({
+                  tickets: graph.tickets.set(1, {
+                    ...graph.tickets.get(1),
+                    state: Escalated(FinalizationUnavailableEscalated({
+                      ...failure,
+                      finalization: { ...failure.finalization, input: 0 },
+                    })),
+                  }),
+                }))
+            | _ => false
+          }
+        | _ => false
+      }))
+      .then(submit(ResumeTicket(1)))
+      .then(check(finalizing(1, operation =>
+        operation.round == 1 and operation.generation == 2)))
+      .then(requestEvaluation(1, 5620))
+      .then(check(match graph.tickets.get(1).state {
+        | Evaluation(evaluation) => and {
+            evaluation.round == 2,
+            evaluation.origin == Requested({ generation: 2, evidence: 5620 }),
+            // A running round is held to the request that opened it.
+            not(graphInvariant({
+              tickets: graph.tickets.set(1, {
+                ...graph.tickets.get(1),
+                state: Evaluation({
+                  ...evaluation,
+                  origin: Requested({ generation: 0, evidence: 5620 }),
+                }),
+              }),
+            })),
+            not(graphInvariant({
+              tickets: graph.tickets.set(1, {
+                ...graph.tickets.get(1),
+                state: Evaluation({
+                  ...evaluation,
+                  origin: Requested({ generation: 2, evidence: 0 }),
+                }),
+              }),
+            })),
+            not(graphInvariant({
+              tickets: graph.tickets.set(1, {
+                ...graph.tickets.get(1),
+                state: Evaluation({ ...evaluation, origin: OpenedByWork }),
+              }),
+            })),
+          }
+        | _ => false
+      }))
+      .then(reportEvaluatorResult(1, 5621, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 5622, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 5623, EvaluatorPass))
+      .then(check(finalizing(1, operation => and {
+        operation.round == 2,
+        operation.generation == 3,
+        operation.origin == Requested({ generation: 2, evidence: 5620 }),
+        operation.basis == PassedVerdict,
+      })))
+      // A report for the operation that asked is stale, and completes nothing.
+      .then(submit(late))
+      .then(check(lastDecision == TicketRefused(FinalizationNotCurrent({
+        ticket: 1,
+        workCycle: 1,
+        generation: 2,
+      }))))
+      .then(check(ticketFinalizing(1)))
+      .then(reportFinalization(1, FinalizationSucceeded(5631)))
+      .then(check(ticketDone(1)))
+  }
+
+  pure def withEvaluationOrigin(
+    candidate: TicketGraph,
+    origin: EvaluationOrigin,
+  ): TicketGraph = match candidate.tickets.get(1).state {
+    | Evaluation(evaluation) => {
+        tickets: candidate.tickets.set(1, {
+          ...candidate.tickets.get(1),
+          state: Evaluation({ ...evaluation, origin: origin }),
+        }),
+      }
+    | _ => candidate
+  }
+
+  // A round keeps the request that opened it while it is blocked and when it
+  // is resumed. A third round was asked for by the second round's operation,
+  // whose generation is 2 or later, and never by an earlier one.
+  run requestedRoundKeepsItsOriginTest = {
+    passedOnce(5900)
+      .then(reportFinalization(1, FinalizationResultUnavailable(5910)))
+      .then(submit(ResumeTicket(1)))
+      .then(requestEvaluation(1, 5920))
+      .then(reportEvaluatorResult(1, 5921, EvaluatorPass))
+      .then(reportEvaluatorUnavailable(1, 5922))
+      .then(check(match graph.tickets.get(1).state {
+        | Escalated(escalation) => match escalation {
+            | EvaluationBlockedEscalated(saved) =>
+                saved.round == 2
+                and saved.origin == Requested({ generation: 2, evidence: 5920 })
+            | _ => false
+          }
+        | _ => false
+      }))
+      .then(submit(ResumeTicket(1)))
+      .then(check(evaluating(1, evaluation =>
+        evaluation.round == 2
+        and evaluation.origin == Requested({ generation: 2, evidence: 5920 }))))
+      .then(reportEvaluatorResult(1, 5923, EvaluatorPass))
+      .then(reportEvaluatorResult(1, 5924, EvaluatorPass))
+      .then(check(finalizing(1, operation =>
+        operation.round == 2 and operation.generation == 3)))
+      .then(requestEvaluation(1, 5930))
+      .then(check(evaluating(1, evaluation =>
+        evaluation.round == 3
+        and evaluation.origin == Requested({ generation: 3, evidence: 5930 }))))
+      .then(check(and {
+        graphInvariant(graph),
+        graphInvariant(withEvaluationOrigin(
+          graph,
+          Requested({ generation: 2, evidence: 5930 }),
+        )),
+        not(graphInvariant(withEvaluationOrigin(
+          graph,
+          Requested({ generation: 1, evidence: 5930 }),
+        ))),
+      }))
+  }
+
+  // A failed basis is the evaluation its operation follows in every part: its
+  // ticket, work cycle, round, result and source, a valid evaluation, and one
+  // that failed.
+  run failedBasisIsHeldInEveryPartTest = {
+    passedOnce(5700)
+      .then(submit(CreateTicket(released(2, Set()))))
+      .then(reportFinalization(1, FinalizationResultUnavailable(5710)))
+      .then(submit(ResumeTicket(1)))
+      .then(requestEvaluation(1, 5720))
+      .then(reportEvaluatorResult(1, 5721, EvaluatorFail))
+      .then(reportEvaluatorResult(1, 5722, EvaluatorPass))
+      .then(check(match graph.tickets.get(1).state {
+        | Finalization(operation) => match operation.basis {
+            | FailedVerdict(failed) => {
+                val ticket = graph.tickets.get(1)
+                val other = graph.tickets.get(2)
+                val running = requestedEvaluation(
+                  ticket,
+                  {
+                    ...operation,
+                    round: 1,
+                    generation: 2,
+                    origin: OpenedByWork,
+                    basis: PassedVerdict,
+                  },
+                  5720,
+                )
+                and {
+                  operation.round == 2,
+                  operation.generation == 3,
+                  graphInvariant(graph),
+                  not(graphInvariant(withOperation(graph, {
+                    ...operation,
+                    round: 3,
+                  }))),
+                  not(graphInvariant(withOperation(graph, {
+                    ...operation,
+                    input: operation.input + 1,
+                  }))),
+                  not(graphInvariant(withOperation(graph, {
+                    ...operation,
+                    source: operation.source + 1,
+                  }))),
+                  // The ticket and its operation in a later work cycle.
+                  not(graphInvariant({
+                    tickets: graph.tickets.set(1, {
+                      ...ticket,
+                      workCyclesStarted: 2,
+                      state: Finalization({ ...operation, workCycle: 2 }),
+                    }),
+                  })),
+                  // The operation on another ticket.
+                  not(graphInvariant({
+                    tickets: graph.tickets.set(2, {
+                      ...other,
+                      workCyclesStarted: 1,
+                      state: Finalization(operation),
+                    }),
+                  })),
+                  // No operation is of a work cycle before the first.
+                  not(graphInvariant({
+                    tickets: graph.tickets.set(2, {
+                      ...other,
+                      state: Finalization({
+                        workCycle: 0,
+                        round: 1,
+                        generation: 1,
+                        input: operation.input,
+                        source: operation.source,
+                        origin: OpenedByWork,
+                        basis: PassedVerdict,
+                      }),
+                    }),
+                  })),
+                  // The same round still running.
+                  running.origin == operation.origin,
+                  invariant(running),
+                  not(graphInvariant(withOperation(graph, {
+                    ...operation,
+                    basis: FailedVerdict(running),
+                  }))),
+                  // No valid evaluation.
+                  not(graphInvariant(withOperation(graph, {
+                    ...operation,
+                    basis: FailedVerdict({
+                      ...failed,
+                      plan: {
+                        ...failed.plan,
+                        stages: failed.plan.stages.concat(failed.plan.stages),
+                      },
+                    }),
+                  }))),
+                }
+              }
+            | _ => false
+          }
+        | _ => false
+      }))
+  }
+
+  // A failed basis is a requested round's. The first evaluation's failure is
+  // disposed at once and never waits in Finalization.
+  run failedBasisIsARequestedRoundTest = {
+    init
+      .then(submit(CreateTicket(released(1, Set()))))
+      .then(submit(dispatch(1)))
+      .then(reportWorkResultWithSource(1, 5800, 5890))
+      .then(reportEvaluatorResult(1, 5801, EvaluatorFail))
+      .then(check(match graph.tickets.get(1).state {
+        | Evaluation(evaluation) => {
+            val failed = applyEvaluationReport(
+              evaluation,
+              currentEvaluatorReport(1, evaluation, 5802, EvaluatorPass),
+            )
+            val operation = finalizationAfter(failed, FailedVerdict(failed))
+            and {
+              // Nor is round 1 ever a requested one.
+              not(graphInvariant({
+                tickets: graph.tickets.set(1, {
+                  ...graph.tickets.get(1),
+                  state: Evaluation({
+                    ...evaluation,
+                    origin: Requested({ generation: 1, evidence: 5803 }),
+                  }),
+                }),
+              })),
+              invariant(failed),
+              failedBasisEntries(FailedVerdict(failed)).length() > 0,
+              not(graphInvariant(withOperation(graph, operation))),
+              graphInvariant(withOperation(graph, {
+                ...operation,
+                basis: PassedVerdict,
+              })),
+            }
+          }
+        | _ => false
+      }))
   }
 
   run finalizationResultEvidenceMustBePositiveTest = {
@@ -1841,7 +2650,134 @@ module ticket_tests {
     ))
   }
 
-  def modelInvariant = graphInvariant(graph) and decisionInvariant
+  def priorOperationIs(ticket: int, workCycle: int, generation: int): bool =
+    match priorGraph.tickets.get(ticket).state {
+      | Finalization(operation) =>
+          operation.workCycle == workCycle
+          and operation.generation == generation
+      | _ => false
+    }
+
+  def priorEvaluationIs(ticket: int, workCycle: int, round: int): bool =
+    match priorGraph.tickets.get(ticket).state {
+      | Evaluation(evaluation) =>
+          evaluation.workCycle == workCycle and evaluation.round == round
+      | Escalated(escalation) => match escalation {
+          | EvaluationBlockedEscalated(saved) =>
+              saved.workCycle == workCycle and saved.round == round
+          | _ => false
+        }
+      | _ => false
+    }
+
+  // A decision about a finalization or an evaluation was addressed to the
+  // one that was current: its work cycle, and its generation or its round.
+  def decisionsAddressTheCurrent = match lastDecision {
+    | TicketRefused(_) => true
+    | TicketDecided(success) => match success.event {
+        | TicketFinalizationSucceeded(fact) =>
+            priorOperationIs(fact.ticket, fact.workCycle, fact.generation)
+        | TicketFinalizationNeedsWork(fact) =>
+            priorOperationIs(fact.ticket, fact.workCycle, fact.generation)
+        | TicketFinalizationUnavailable(fact) =>
+            priorOperationIs(fact.ticket, fact.workCycle, fact.generation)
+        | TicketFinalizationNeedsEvaluation(fact) =>
+            priorOperationIs(fact.ticket, fact.workCycle, fact.generation)
+        | TicketFinalizationFailureReworked(fact) =>
+            priorOperationIs(fact.ticket, fact.workCycle, fact.generation)
+        | TicketFinalizationFailureEscalated(fact) =>
+            priorOperationIs(fact.ticket, fact.workCycle, fact.generation)
+        | TicketEvaluationWithdrawn(fact) =>
+            priorEvaluationIs(fact.ticket, fact.workCycle, fact.round)
+        | TicketEvaluationInvalidated(fact) =>
+            priorEvaluationIs(fact.ticket, fact.workCycle, 1)
+        | _ => true
+      }
+  }
+
+  pure def operationFollows(
+    operation: FinalizationOperation,
+    evaluation: EvaluationInstance,
+  ): bool = and {
+    operation.workCycle == evaluation.workCycle,
+    operation.round == evaluation.round,
+    operation.origin == evaluation.origin,
+    operation.generation == match evaluation.origin {
+      | OpenedByWork => 1
+      | Requested(request) => request.generation + 1
+    },
+  }
+
+  pure def heldEvaluation(state: TicketState): List[EvaluationInstance] =
+    match state {
+      | Evaluation(evaluation) => [evaluation]
+      | Escalated(escalation) => match escalation {
+          | EvaluationBlockedEscalated(evaluation) => [evaluation]
+          | _ => []
+        }
+      | _ => []
+    }
+
+  // A round keeps its work cycle, number and origin while it runs, when it is
+  // blocked and when it is resumed.
+  pure def roundKept(before: TicketState, after: TicketState): bool = {
+    val was = heldEvaluation(before)
+    val now = heldEvaluation(after)
+    was.length() == 0 or now.length() == 0 or and {
+      now[0].workCycle == was[0].workCycle,
+      now[0].round == was[0].round,
+      now[0].origin == was[0].origin,
+    }
+  }
+
+  // A round is kept as above. A requested evaluation is the round after its
+  // requester's and names the requester's generation. The operation an
+  // evaluation hands over is of the evaluation's round and the generation
+  // after its requester's, and a resumed one is the generation after the one
+  // that escalated. Together they keep a work cycle from using a generation
+  // twice.
+  def roundsAndGenerationsContinue = graph.tickets.keys().forall(ticket =>
+    not(priorGraph.tickets.keys().contains(ticket)) or {
+      val before = priorGraph.tickets.get(ticket).state
+      roundKept(before, graph.tickets.get(ticket).state)
+      and match graph.tickets.get(ticket).state {
+        | Evaluation(evaluation) => match before {
+            | Finalization(operation) => and {
+                evaluation.workCycle == operation.workCycle,
+                evaluation.round == operation.round + 1,
+                match evaluation.origin {
+                  | Requested(request) =>
+                      request.generation == operation.generation
+                  | OpenedByWork => false
+                },
+              }
+            | _ => true
+          }
+        | Finalization(operation) => match before {
+            | Evaluation(evaluation) => operationFollows(operation, evaluation)
+            | Escalated(escalation) => match escalation {
+                | EvaluationBlockedEscalated(evaluation) =>
+                    operationFollows(operation, evaluation)
+                | FinalizationUnavailableEscalated(failure) => and {
+                    operation.workCycle == failure.finalization.workCycle,
+                    operation.round == failure.finalization.round,
+                    operation.generation
+                      == failure.finalization.generation + 1,
+                  }
+                | _ => true
+              }
+            | _ => true
+          }
+        | _ => true
+      }
+    })
+
+  def modelInvariant = and {
+    graphInvariant(graph),
+    decisionInvariant,
+    decisionsAddressTheCurrent,
+    roundsAndGenerationsContinue,
+  }
 
   def someDone = graph.tickets.keys().exists(ticket =>
     graph.tickets.get(ticket).state == Done)
@@ -1862,22 +2798,38 @@ module ticket_tests {
 
   def someWithdrawnBasis = graph.tickets.keys().exists(ticket =>
     match graph.tickets.get(ticket).state {
-      | Finalization(operation) => match operation.basis {
-          | WithdrawnVerdict(_) => true
-          | _ => false
-        }
+      | Finalization(operation) => operation.basis == WithdrawnVerdict
       | _ => false
     })
 
   def someDoneAfterReevaluation = lastDecision != noDecision
     and match decidedEvent {
-      | TicketFinalizationSucceeded(fact) => fact.generation > 1 and someDone
+      | TicketFinalizationSucceeded(fact) =>
+          someDone
+          and match priorGraph.tickets.get(fact.ticket).state {
+            | Finalization(operation) => operation.round > 1
+            | _ => false
+          }
       | _ => false
     }
 
-  def someEscalated = graph.tickets.keys().exists(ticket =>
+  def someRevokedFromFinalization = lastDecision != noDecision
+    and match decidedEvent {
+      | TicketRevoked(ticket) =>
+          ticket > 0 and graphFinalizing(priorGraph, ticket)
+      | _ => false
+    }
+
+  def somePassedLaterRound = graph.tickets.keys().exists(ticket =>
     match graph.tickets.get(ticket).state {
-      | Escalated(_) => true
+      | Finalization(operation) =>
+          operation.round > 1 and operation.basis == PassedVerdict
+      | _ => false
+    })
+
+  def someLaterCycleFinalization = graph.tickets.keys().exists(ticket =>
+    match graph.tickets.get(ticket).state {
+      | Finalization(operation) => operation.workCycle > 1
       | _ => false
     })
 
@@ -1969,5 +2921,557 @@ module ticket_tests {
     failureStandsOne,
     failureStandsEscalatedOne,
     failureStandsInvalidatedOne,
+  }
+
+  // === The finalizer's simulation ===========================================
+  //
+  // `step` spends most of a trace creating and dispatching, so it seldom
+  // reaches a finalizer. This simulation starts from a ticket whose first
+  // evaluation has passed and takes only the steps a finalizer, its
+  // evaluators and an operator take from there, among them commands addressed
+  // to an operation, a round or a task that may not be the current one.
+
+  pure val finalizingGraph: TicketGraph = {
+    val created = applyCommand(
+      { tickets: Map() },
+      CreateTicket(released(1, Set())),
+      reworkPolicy,
+    )
+    val dispatched = applyCommand(created, dispatch(1), reworkPolicy)
+    val ticket = dispatched.tickets.get(1)
+    val worked = match ticket.state {
+      | Work(work) => applyCommand(
+          dispatched,
+          ReportTaskTerminal(WorkResultReport({
+            ticket: 1,
+            result: validatedTaskResult(
+              workTaskObligation(ticket, 1, work.source, work.input),
+              501,
+            ),
+            acceptedSourceRef: source(1, 501),
+          })),
+          reworkPolicy,
+        )
+      | _ => dispatched
+    }
+    range(0, 3).foldl(worked, (reached, _) =>
+      match reached.tickets.get(1).state {
+        | Evaluation(evaluation) => applyCommand(
+            reached,
+            ReportTaskTerminal(
+              currentEvaluatorReport(1, evaluation, 502, EvaluatorPass),
+            ),
+            reworkPolicy,
+          )
+        | _ => reached
+      })
+  }
+
+  action initFinalizing = all {
+    graph' = finalizingGraph,
+    priorGraph' = finalizingGraph,
+    lastDecision' = noDecision,
+  }
+
+  // A stray command is addressed near what is current: to it exactly, or
+  // off it in one part of the address, so a refusal shows which part was
+  // checked. Where ticket 1 has no operation or evaluation to address, it
+  // addresses the first one its current work cycle could have. `Earlier` and
+  // `Later` move a generation or a round, and `AnotherCycle` names the next
+  // work cycle. A stray finalization report carries a result every basis
+  // takes or one of the two only one basis takes.
+  type Drift = OnTarget | AnotherCycle | Earlier | Later
+
+  pure def drifted(
+    cycle: int,
+    ordinal: int,
+    drift: Drift,
+  ): { cycle: int, ordinal: int } = match drift {
+    | OnTarget => { cycle: cycle, ordinal: ordinal }
+    | AnotherCycle => { cycle: cycle + 1, ordinal: ordinal }
+    | Earlier => {
+        cycle: cycle,
+        ordinal: if (ordinal > 1) ordinal - 1 else ordinal + 2,
+      }
+    | Later => { cycle: cycle, ordinal: ordinal + 1 }
+  }
+
+  action strayFinalizationOne = {
+    nondet drift = Set(OnTarget, AnotherCycle, Earlier, Later).oneOf()
+    nondet result = Set(
+      FinalizationSucceeded(601),
+      FinalizationNeedsEvaluation(604),
+      FinalizationFailureStands(605),
+    ).oneOf()
+    val ticket = graph.tickets.get(1)
+    val address = match ticket.state {
+      | Finalization(operation) =>
+          drifted(operation.workCycle, operation.generation, drift)
+      | _ => drifted(ticket.workCyclesStarted, 1, drift)
+    }
+    submit(ReportFinalizationResult({
+      ticket: 1,
+      workCycle: address.cycle,
+      generation: address.ordinal,
+      result: result,
+    }))
+  }
+
+  action strayInvalidateOne = {
+    nondet drift = Set(OnTarget, AnotherCycle, Earlier, Later).oneOf()
+    val ticket = graph.tickets.get(1)
+    val address = match ticket.state {
+      | Evaluation(evaluation) =>
+          drifted(evaluation.workCycle, evaluation.round, drift)
+      | Escalated(escalation) => match escalation {
+          | EvaluationBlockedEscalated(saved) =>
+              drifted(saved.workCycle, saved.round, drift)
+          | _ => drifted(ticket.workCyclesStarted, 1, drift)
+        }
+      | _ => drifted(ticket.workCyclesStarted, 1, drift)
+    }
+    submit(InvalidateEvaluation({
+      ticket: 1,
+      workCycle: address.cycle,
+      round: address.ordinal,
+      evidence: 606,
+    }))
+  }
+
+  // A stray evaluator report names an awaited task, or one that differs from
+  // it in one part of its identity. It is a produced result, which is held to
+  // the whole obligation, or a failure, which is held to the identity alone.
+  type TaskDrift =
+    SameTask
+    | TaskOfAnotherCycle
+    | TaskOfAnotherRound
+    | TaskOfAnotherStage
+    | TaskOfAnotherGeneration
+    | TaskOfAnotherEvaluator
+
+  type StrayOutcome = StrayFail | StrayProcessFailed
+
+  pure def driftedTask(
+    identity: EvaluationTaskIdentity,
+    drift: TaskDrift,
+  ): TaskIdentity = EvaluationTask(match drift {
+    | SameTask => identity
+    | TaskOfAnotherCycle => {
+        ...identity,
+        workCycle: identity.workCycle + 1,
+      }
+    | TaskOfAnotherRound => { ...identity, round: identity.round + 1 }
+    | TaskOfAnotherStage => { ...identity, stage: identity.stage + 10 }
+    | TaskOfAnotherGeneration => {
+        ...identity,
+        generation: identity.generation + 1,
+      }
+    | TaskOfAnotherEvaluator => {
+        ...identity,
+        evaluator: identity.evaluator + 1,
+      }
+  })
+
+  // The first awaited evaluator's task, or the first task the current work
+  // cycle's evaluation would have where none is awaited.
+  pure def strayTaskBase(ticket: Ticket): EvaluationTaskIdentity = {
+    val fallback = {
+      ticket: 1,
+      workCycle: ticket.workCyclesStarted,
+      round: 1,
+      stage: 10,
+      generation: 1,
+      evaluator: 11,
+    }
+    match ticket.state {
+      | Evaluation(evaluation) =>
+          match currentTaskObligations(evaluation)[0].task {
+            | EvaluationTask(identity) => identity
+            | WorkTask(_) => fallback
+          }
+      | _ => fallback
+    }
+  }
+
+  pure def strayEvaluatorReport(
+    task: TaskIdentity,
+    outcome: StrayOutcome,
+  ): TaskTerminalReport = {
+    val obligation = { task: task, definition: EVALUATOR, contextRef: 501 }
+    match outcome {
+      | StrayFail => EvaluationResultReport({
+          ticket: 1,
+          result: validatedTaskResult(obligation, 608),
+          verdict: EvaluatorFail,
+        })
+      | StrayProcessFailed => TerminalFailureReport({
+          ticket: 1,
+          failure: { task: task, evidence: 609 },
+          kind: ProcessFailure,
+        })
+    }
+  }
+
+  action strayEvaluatorOne = {
+    nondet taskDrift = Set(
+      SameTask,
+      TaskOfAnotherCycle,
+      TaskOfAnotherRound,
+      TaskOfAnotherStage,
+      TaskOfAnotherGeneration,
+      TaskOfAnotherEvaluator,
+    ).oneOf()
+    nondet outcome = Set(StrayFail, StrayProcessFailed).oneOf()
+    submit(ReportTaskTerminal(strayEvaluatorReport(
+      driftedTask(strayTaskBase(graph.tickets.get(1)), taskDrift),
+      outcome,
+    )))
+  }
+
+  // A finished ticket leaves the walk nothing but refusals, so it takes a
+  // few and starts again.
+  action restartFinalizing = all {
+    isTerminal(graph.tickets.get(1).state),
+    graph' = finalizingGraph,
+    priorGraph' = finalizingGraph,
+    lastDecision' = noDecision,
+  }
+
+  action finalizerStep =
+    if (isTerminal(graph.tickets.get(1).state)) any {
+      restartFinalizing,
+      strayFinalizationOne,
+      strayEvaluatorOne,
+    } else finalizerLiveStep
+
+  // A round passes only by three passes in a row, so a pass is listed more
+  // than once: the walk picks among the listed steps evenly, and otherwise
+  // seldom sees a requested round pass.
+  action finalizerLiveStep = any {
+    revokeOne,
+    resumeOne,
+    passWorkOne,
+    passWorkOne,
+    failWorkOne,
+    passEvaluatorOne,
+    passEvaluatorOne,
+    passEvaluatorOne,
+    passEvaluatorOne,
+    failEvaluatorOne,
+    unavailableEvaluatorOne,
+    invalidateOne,
+    invalidateFailedEvaluatorOne,
+    completeFinalizationOne,
+    reworkFinalizationOne,
+    unavailableFinalizationOne,
+    requestEvaluationOne,
+    failureStandsOne,
+    failureStandsEscalatedOne,
+    failureStandsInvalidatedOne,
+    strayFinalizationOne,
+    strayInvalidateOne,
+    strayEvaluatorOne,
+  }
+
+  // The events `evolve` is tried against in every state the simulation
+  // reaches. They are ticket 1's only: each finalization, withdrawal and
+  // invalidation event at each address near the current one, its revocation
+  // and resumptions, and each event a report from an awaited evaluator could
+  // have been decided as. Creation, update, dispatch and work events are not
+  // among them.
+
+  pure def finalizationEventsAt(cycle: int, generation: int): Set[TicketEvent] = {
+    val fact = {
+      ticket: 1,
+      workCycle: cycle,
+      generation: generation,
+      evidence: 700,
+    }
+    Set(
+      TicketFinalizationSucceeded(fact),
+      TicketFinalizationNeedsWork(fact),
+      TicketFinalizationUnavailable(fact),
+      TicketFinalizationNeedsEvaluation(fact),
+      TicketFinalizationFailureReworked(fact),
+      TicketFinalizationFailureEscalated(fact),
+    )
+  }
+
+  pure val addressedEvents: Set[TicketEvent] =
+    tuples(Set(1, 2, 3), Set(1, 2, 3, 4, 5, 6))
+      .map(address => finalizationEventsAt(address._1, address._2))
+      .flatten()
+      .union(tuples(Set(1, 2, 3), Set(1, 2, 3, 4, 5)).map(address =>
+        TicketEvaluationWithdrawn({
+          ticket: 1,
+          workCycle: address._1,
+          round: address._2,
+          evidence: 701,
+        })))
+      .union(Set(1, 2, 3).map(cycle => TicketEvaluationInvalidated({
+        ticket: 1,
+        workCycle: cycle,
+        evidence: 702,
+      })))
+      .union(Set(
+        TicketRevoked(1),
+        TicketWorkResumed(1),
+        TicketEvaluationResumed(1),
+        TicketFinalizationResumed(1),
+      ))
+
+  def currentEvaluatorReports: Set[TaskTerminalReport] =
+    match graph.tickets.get(1).state {
+      | Evaluation(evaluation) => currentTaskObligations(evaluation)
+          .foldl(Set(), (found, obligation) => found.union(Set(
+            EvaluationResultReport({
+              ticket: 1,
+              result: validatedTaskResult(obligation, 710),
+              verdict: EvaluatorPass,
+            }),
+            EvaluationResultReport({
+              ticket: 1,
+              result: validatedTaskResult(obligation, 711),
+              verdict: EvaluatorFail,
+            }),
+            TerminalFailureReport({
+              ticket: 1,
+              failure: { task: obligation.task, evidence: 712 },
+              kind: ProcessFailure,
+            }),
+            TerminalFailureReport({
+              ticket: 1,
+              failure: { task: obligation.task, evidence: 713 },
+              kind: ExecutionUnavailableFailure,
+            }),
+          )))
+      | _ => Set()
+    }
+
+  def reportEvents(report: TaskTerminalReport): Set[TicketEvent] = {
+    val entries = match graph.tickets.get(1).state {
+      | Evaluation(evaluation) => {
+          val updated = applyEvaluationReport(evaluation, report)
+          match updated.state {
+            | EvaluationFailed(completed) => reworkEntries(updated, completed)
+            | _ => []
+          }
+        }
+      | _ => []
+    }
+    Set(
+      TicketEvaluationProgressed({ ticket: 1, report: report }),
+      TicketEvaluationPassed({ ticket: 1, report: report }),
+      TicketEvaluationBlocked({ ticket: 1, report: report }),
+      TicketEvaluationFailureReturned({ ticket: 1, report: report }),
+      TicketEvaluationReworkStarted({
+        ticket: 1,
+        report: report,
+        evidence: entries,
+      }),
+      TicketEvaluationFailureEscalated({
+        ticket: 1,
+        report: report,
+        evidence: entries,
+      }),
+      TicketEvaluationFailureInvalidated({
+        ticket: 1,
+        report: report,
+        evidence: 1601,
+      }),
+    )
+  }
+
+  def candidateEvents: Set[TicketEvent] = addressedEvents
+    .union(currentEvaluatorReports.map(report => reportEvents(report)).flatten())
+
+  pure def finalizationReportBehind(
+    fact: FinalizationFact,
+    result: FinalizationResult,
+  ): TicketCommand = ReportFinalizationResult({
+    ticket: fact.ticket,
+    workCycle: fact.workCycle,
+    generation: fact.generation,
+    result: result,
+  })
+
+  // The command that decides an event, where one command does.
+  pure def commandBehind(event: TicketEvent): TicketCommand = match event {
+    | TicketFinalizationSucceeded(fact) =>
+        finalizationReportBehind(fact, FinalizationSucceeded(fact.evidence))
+    | TicketFinalizationNeedsWork(fact) =>
+        finalizationReportBehind(fact, FinalizationNeedsWork(fact.evidence))
+    | TicketFinalizationUnavailable(fact) => finalizationReportBehind(
+        fact,
+        FinalizationResultUnavailable(fact.evidence),
+      )
+    | TicketFinalizationNeedsEvaluation(fact) => finalizationReportBehind(
+        fact,
+        FinalizationNeedsEvaluation(fact.evidence),
+      )
+    | TicketFinalizationFailureReworked(fact) =>
+        finalizationReportBehind(fact, FinalizationFailureStands(fact.evidence))
+    | TicketFinalizationFailureEscalated(fact) =>
+        finalizationReportBehind(fact, FinalizationFailureStands(fact.evidence))
+    | TicketEvaluationWithdrawn(fact) => InvalidateEvaluation({
+        ticket: fact.ticket,
+        workCycle: fact.workCycle,
+        round: fact.round,
+        evidence: fact.evidence,
+      })
+    | TicketEvaluationInvalidated(fact) => InvalidateEvaluation({
+        ticket: fact.ticket,
+        workCycle: fact.workCycle,
+        round: 1,
+        evidence: fact.evidence,
+      })
+    | TicketEvaluationProgressed(fact) => ReportTaskTerminal(fact.report)
+    | TicketEvaluationPassed(fact) => ReportTaskTerminal(fact.report)
+    | TicketEvaluationBlocked(fact) => ReportTaskTerminal(fact.report)
+    | TicketEvaluationFailureReturned(fact) => ReportTaskTerminal(fact.report)
+    | TicketEvaluationReworkStarted(fact) => ReportTaskTerminal(fact.report)
+    | TicketEvaluationFailureEscalated(fact) => ReportTaskTerminal(fact.report)
+    | TicketEvaluationFailureInvalidated(fact) =>
+        ReportTaskTerminal(fact.report)
+    | TicketRevoked(ticket) => RevokeTicket(ticket)
+    | _ => ResumeTicket(1)
+  }
+
+  def producible(event: TicketEvent): bool = Set(
+    decide(graph, commandBehind(event), reworkPolicy),
+    decide(graph, commandBehind(event), escalatePolicy),
+    decide(graph, commandBehind(event), invalidatePolicy),
+  ).exists(decision => match decision {
+    | TicketDecided(success) => success.event == event
+    | TicketRefused(_) => false
+  })
+
+  // `evolve` never leaves the invariant on any candidate event.
+  def evolveClosed = candidateEvents.forall(event =>
+    graphInvariant(evolve(graph, event)))
+
+  // `evolve` applies a candidate event only where `decide` produces it.
+  def evolveOnlyWhatDecideProduces = candidateEvents.forall(event =>
+    evolve(graph, event) == graph or producible(event))
+
+  pure def isDecided(decision: TicketDecision): bool = match decision {
+    | TicketDecided(_) => true
+    | TicketRefused(_) => false
+  }
+
+  def accepted(command: TicketCommand): bool =
+    isDecided(decide(graph, command, escalatePolicy))
+
+  // Every state short of Done and Revoked has a command the domain accepts:
+  // each basis takes exactly the results it allows, an evaluation can always
+  // be reported on or invalidated, an escalation resumed, and a ticket
+  // revoked wherever nothing can be completing.
+  def neverStuck = match graph.tickets.get(1).state {
+    | Done => true
+    | Revoked => true
+    | Finalization(operation) => and {
+        accepted(finalizationReportBehind(
+          {
+            ticket: 1,
+            workCycle: operation.workCycle,
+            generation: operation.generation,
+            evidence: 901,
+          },
+          FinalizationNeedsEvaluation(901),
+        )),
+        accepted(finalizationReportBehind(
+          {
+            ticket: 1,
+            workCycle: operation.workCycle,
+            generation: operation.generation,
+            evidence: 902,
+          },
+          FinalizationNeedsWork(902),
+        )),
+        accepted(finalizationReportBehind(
+          {
+            ticket: 1,
+            workCycle: operation.workCycle,
+            generation: operation.generation,
+            evidence: 903,
+          },
+          FinalizationResultUnavailable(903),
+        )),
+        accepted(finalizationReportBehind(
+          {
+            ticket: 1,
+            workCycle: operation.workCycle,
+            generation: operation.generation,
+            evidence: 905,
+          },
+          FinalizationSucceeded(905),
+        )) == (operation.basis == PassedVerdict),
+        accepted(finalizationReportBehind(
+          {
+            ticket: 1,
+            workCycle: operation.workCycle,
+            generation: operation.generation,
+            evidence: 906,
+          },
+          FinalizationFailureStands(906),
+        )) == basisFailed(operation),
+        accepted(RevokeTicket(1)) == (operation.basis != PassedVerdict),
+      }
+    | Evaluation(evaluation) => and {
+        currentEvaluatorReports.size() > 0,
+        currentEvaluatorReports.forall(report =>
+          accepted(ReportTaskTerminal(report))),
+        accepted(InvalidateEvaluation({
+          ticket: 1,
+          workCycle: evaluation.workCycle,
+          round: evaluation.round,
+          evidence: 904,
+        })),
+        accepted(RevokeTicket(1)),
+      }
+    | Escalated(escalation) => and {
+        accepted(ResumeTicket(1)),
+        accepted(RevokeTicket(1)),
+        match escalation {
+          | EvaluationBlockedEscalated(saved) =>
+              accepted(InvalidateEvaluation({
+                ticket: 1,
+                workCycle: saved.workCycle,
+                round: saved.round,
+                evidence: 907,
+              }))
+          | _ => true
+        },
+      }
+    | _ => accepted(RevokeTicket(1))
+  }
+
+  // A finalization that resumes is the operation that escalated, one
+  // generation on.
+  def resumeKeepsTheOperation = match lastDecision {
+    | TicketRefused(_) => true
+    | TicketDecided(success) => match success.event {
+        | TicketFinalizationResumed(ticket) =>
+            match priorGraph.tickets.get(ticket).state {
+              | Escalated(escalation) => match escalation {
+                  | FinalizationUnavailableEscalated(failure) =>
+                      graph.tickets.get(ticket).state == Finalization({
+                        ...failure.finalization,
+                        generation: failure.finalization.generation + 1,
+                      })
+                  | _ => false
+                }
+              | _ => false
+            }
+        | _ => true
+      }
+  }
+
+  def finalizerInvariant = and {
+    modelInvariant,
+    evolveClosed,
+    evolveOnlyWhatDecideProduces,
+    resumeKeepsTheOperation,
+    neverStuck,
   }
 }
