@@ -77,8 +77,8 @@ has no `--mbt`, so a scenario's inputs come from its `run` definition.
 
 `ticket.qnt` declares no Quint `action`s — it is pure functions over these
 types — so coverage is measured over the decision outcomes and lifecycle phases
-the command paths produce. Over the 42 traces: `TicketEvent` 20/20,
-`TicketState` 7/7, `TicketRefusal` 15/15: every declared variant is exercised.
+the command paths produce. Over the 59 traces: `TicketEvent` 26/26,
+`TicketState` 7/7, `TicketRefusal` 16/16: every declared variant is exercised.
 `index.json` holds the live tables.
 
 A refusal reaches a trace only when a scenario takes it through `submit`; one

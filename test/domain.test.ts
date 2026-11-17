@@ -226,11 +226,18 @@ test("an update refuses a dependency it adds unless that dependency is live and 
 });
 
 const T1 = t.TicketId(1);
-const invalidate = (cycle: number, evidence: number) =>
-  new k.InvalidateEvaluation(T1, t.CycleNumber(cycle), t.ContentRef(evidence));
+const invalidate = (cycle: number, evidence: number, round = 1) =>
+  new k.InvalidateEvaluation(
+    T1,
+    t.CycleNumber(cycle),
+    t.Round(round),
+    t.ContentRef(evidence),
+  );
 const state_of = (d: b.Driver) => d.graph.tickets.get(T1)!.state;
-const refused = (cycle: number) =>
-  new k.TicketRefused(new k.EvaluationNotCurrent(T1, t.CycleNumber(cycle)));
+const refused = (cycle: number, round = 1) =>
+  new k.TicketRefused(
+    new k.EvaluationNotCurrent(T1, t.CycleNumber(cycle), t.Round(round)),
+  );
 
 function evaluating(): b.Driver {
   const driver = started();
@@ -354,4 +361,208 @@ test("work that fails after an invalidation resumes with the same cause", () => 
   );
   expect(state.execution.input.retry_evidence).toEqual([t.ContentRef(521)]);
   expect(k.graph_invariant(driver.graph)).toBe(true);
+});
+
+const pass = (d: b.Driver, ref: number) =>
+  d.submit(b.evaluator_result_command(d.graph, 1, ref, new e.EvaluatorPass()));
+const fail = (d: b.Driver, ref: number) =>
+  d.submit(b.evaluator_result_command(d.graph, 1, ref, new e.EvaluatorFail()));
+const finalization = (d: b.Driver) => {
+  const s = state_of(d);
+  if (!(s instanceof k.Finalization)) throw new Error("not in finalization");
+  return s.operation;
+};
+const report = (generation: number, result: k.FinalizationResult) =>
+  new k.ReportFinalizationResult(
+    new k.FinalizationResultReport(
+      T1,
+      t.CycleNumber(1),
+      t.Generation(generation),
+      result,
+    ),
+  );
+const not_allowed = (generation: number) =>
+  new k.TicketRefused(
+    new k.FinalizationResultNotAllowed(
+      T1,
+      t.CycleNumber(1),
+      t.Generation(generation),
+    ),
+  );
+
+function passed_once(): b.Driver {
+  const driver = evaluating();
+  pass(driver, 601);
+  pass(driver, 602);
+  pass(driver, 603);
+  return driver;
+}
+
+function failed_twice(): b.Driver {
+  const driver = passed_once();
+  driver.submit(
+    report(1, new k.FinalizationNeedsEvaluation(t.ContentRef(610))),
+  );
+  fail(driver, 611);
+  pass(driver, 612);
+  return driver;
+}
+
+test("a requested evaluation runs the same result again in the same cycle", () => {
+  const driver = passed_once();
+  expect(finalization(driver).basis).toBeInstanceOf(k.PassedVerdict);
+  const decision = driver.submit(
+    report(1, new k.FinalizationNeedsEvaluation(t.ContentRef(610))),
+  );
+  if (!(decision instanceof k.TicketDecided)) throw new Error("not decided");
+  expect(k.decision_valid(driver.prior_graph, decision)).toBe(true);
+  const state = state_of(driver);
+  if (!(state instanceof k.Evaluation)) throw new Error("not evaluating");
+  expect(state.evaluation.round).toBe(2);
+  expect(state.evaluation.origin).toEqual(
+    new e.Requested(t.Generation(1), t.ContentRef(610)),
+  );
+  expect(state.evaluation.input.work_result).toBe(t.ContentRef(501));
+  expect(driver.graph.tickets.get(T1)!.work_cycles_started).toBe(1);
+  const stale = report(1, new k.FinalizationSucceeded(t.ContentRef(620)));
+  expect(driver.submit(stale)).toEqual(
+    new k.TicketRefused(
+      new k.FinalizationNotCurrent(T1, t.CycleNumber(1), t.Generation(1)),
+    ),
+  );
+  pass(driver, 611);
+  pass(driver, 612);
+  pass(driver, 613);
+  expect(finalization(driver).generation).toBe(2);
+  expect(driver.submit(stale)).toBeInstanceOf(k.TicketRefused);
+  driver.submit(report(2, new k.FinalizationSucceeded(t.ContentRef(620))));
+  expect(state_of(driver)).toBeInstanceOf(k.Done);
+});
+
+test("a requested evaluation's failure returns to finalization unjudged", () => {
+  const driver = passed_once();
+  driver.submit(
+    report(1, new k.FinalizationNeedsEvaluation(t.ContentRef(610))),
+  );
+  fail(driver, 611);
+  const decision = driver.submit(
+    b.evaluator_result_command(driver.graph, 1, 612, new e.EvaluatorPass()),
+    () => new k.EscalateEvaluationFailure(),
+  );
+  if (!(decision instanceof k.TicketDecided)) throw new Error("not decided");
+  expect(decision.event).toBeInstanceOf(k.TicketEvaluationFailureReturned);
+  expect(k.decision_valid(driver.prior_graph, decision)).toBe(true);
+  const operation = finalization(driver);
+  expect(operation.basis).toBeInstanceOf(k.FailedVerdict);
+  expect([operation.round, operation.generation]).toEqual([2, 2]);
+  expect(
+    driver.submit(report(2, new k.FinalizationSucceeded(t.ContentRef(620)))),
+  ).toEqual(not_allowed(2));
+  const forged = new k.TicketDecided(
+    new k.TicketFinalizationSucceeded(
+      T1,
+      t.CycleNumber(1),
+      t.Generation(2),
+      t.ContentRef(620),
+    ),
+    [],
+  );
+  expect(k.decision_valid(driver.graph, forged)).toBe(false);
+  expect(k.evolve(driver.graph, forged.event)).toBe(driver.graph);
+});
+
+test("a failed verdict that stands is disposed by the failure policy", () => {
+  const stands = report(2, new k.FinalizationFailureStands(t.ContentRef(620)));
+  const entries = [
+    new e.EvaluationReworkEntry(t.EvaluatorKey(11), t.ContentRef(611)),
+  ];
+  const reworked = failed_twice();
+  reworked.submit(stands);
+  const work = state_of(reworked);
+  if (!(work instanceof k.Work)) throw new Error("not in work");
+  expect(work.execution.input.cause).toEqual(new k.EvaluationRework(entries));
+  expect(work.execution.source).toBe(t.ContentRef(991));
+  const escalated = failed_twice();
+  escalated.submit(stands, () => new k.EscalateEvaluationFailure());
+  expect(state_of(escalated)).toEqual(
+    new k.Escalated(
+      new k.EvaluationFailureEscalated(
+        new k.EvaluationFailureEscalation(entries, t.ContentRef(991)),
+      ),
+    ),
+  );
+  const invalidated = failed_twice();
+  invalidated.submit(
+    stands,
+    () => new k.InvalidateEvaluationFailure(t.ContentRef(630)),
+  );
+  const restarted = state_of(invalidated);
+  if (!(restarted instanceof k.Work)) throw new Error("not in work");
+  expect(restarted.execution.input.cause).toEqual(
+    new k.StackInvalidated(t.ContentRef(630)),
+  );
+  for (const d of [reworked, escalated, invalidated])
+    expect(k.graph_invariant(d.graph)).toBe(true);
+  const passed = passed_once();
+  expect(
+    passed.submit(
+      report(1, new k.FinalizationFailureStands(t.ContentRef(620))),
+    ),
+  ).toEqual(not_allowed(1));
+});
+
+test("a failed verdict may be evaluated again without a work cycle", () => {
+  const driver = failed_twice();
+  driver.submit(
+    report(2, new k.FinalizationNeedsEvaluation(t.ContentRef(620))),
+  );
+  const state = state_of(driver);
+  if (!(state instanceof k.Evaluation)) throw new Error("not evaluating");
+  expect(state.evaluation.round).toBe(3);
+  expect(driver.graph.tickets.get(T1)!.work_cycles_started).toBe(1);
+  expect(k.graph_invariant(driver.graph)).toBe(true);
+});
+
+test("invalidating a requested evaluation withdraws it to finalization", () => {
+  const driver = passed_once();
+  driver.submit(
+    report(1, new k.FinalizationNeedsEvaluation(t.ContentRef(610))),
+  );
+  pass(driver, 611);
+  expect(driver.submit(invalidate(1, 620))).toEqual(refused(1));
+  const decision = driver.submit(invalidate(1, 620, 2));
+  if (!(decision instanceof k.TicketDecided)) throw new Error("not decided");
+  expect(decision.event).toEqual(
+    new k.TicketEvaluationWithdrawn(
+      T1,
+      t.CycleNumber(1),
+      t.Round(2),
+      t.ContentRef(620),
+    ),
+  );
+  expect(
+    decision.obligations.filter((o) => o instanceof k.CancelTask),
+  ).toHaveLength(1);
+  expect(k.decision_valid(driver.prior_graph, decision)).toBe(true);
+  expect(finalization(driver).basis).toEqual(
+    new k.WithdrawnVerdict(t.ContentRef(620)),
+  );
+  expect(
+    driver.submit(report(2, new k.FinalizationSucceeded(t.ContentRef(630)))),
+  ).toEqual(not_allowed(2));
+  expect(
+    driver.submit(
+      report(2, new k.FinalizationFailureStands(t.ContentRef(630))),
+    ),
+  ).toEqual(not_allowed(2));
+  expect(
+    k.evolve(
+      driver.graph,
+      new k.TicketEvaluationInvalidated(
+        T1,
+        t.CycleNumber(1),
+        t.ContentRef(640),
+      ),
+    ),
+  ).toBe(driver.graph);
 });

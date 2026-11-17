@@ -52,8 +52,20 @@ module evaluation_protocol {
     | EvaluationFailed(List[StageRun])
     | EvaluationBlocked(EvaluationProgress)
 
+  // What opened an evaluation: the accepted work result, or a later request
+  // for another evaluation of that same result. `generation` names the
+  // requester's operation and `evidence` is the reference it supplied; the
+  // protocol reads neither.
+  type EvaluationOrigin =
+    OpenedByWork
+    | Requested({ generation: int, evidence: int })
+
+  // `round` numbers the evaluations of one work cycle's result: 1 is the one
+  // the accepted result opens, and each requested one is the next.
   type EvaluationInstance = {
     workCycle: int,
+    round: int,
+    origin: EvaluationOrigin,
     input: EvaluationInput,
     plan: EvaluationPlan,
     state: EvaluationState
@@ -62,12 +74,14 @@ module evaluation_protocol {
   pure def evaluatorTaskIdentity(
     ticket: int,
     workCycle: int,
+    round: int,
     stage: int,
     generation: int,
     evaluator: int,
   ): TaskIdentity = EvaluationTask({
       ticket: ticket,
       workCycle: workCycle,
+      round: round,
       stage: stage,
       generation: generation,
       evaluator: evaluator,
@@ -81,6 +95,7 @@ module evaluation_protocol {
     evaluatorTaskIdentity(
       current.input.ticket,
       current.workCycle,
+      current.round,
       current.plan.stages[progress.stageIndex].key,
       progress.generation,
       evaluator,
@@ -429,12 +444,16 @@ module evaluation_protocol {
 
   pure def begin(
     workCycle: int,
+    round: int,
+    origin: EvaluationOrigin,
     input: EvaluationInput,
     plan: EvaluationPlan,
   ): EvaluationInstance = {
     val first = plan.stages[0]
     {
       workCycle: workCycle,
+      round: round,
+      origin: origin,
       input: input,
       plan: plan,
       state: Running({
@@ -469,12 +488,24 @@ module evaluation_protocol {
       })
     })
 
+  // Round 1 is the one a work result opens, and every later round was
+  // requested.
+  pure def originValid(current: EvaluationInstance): bool =
+    match current.origin {
+      | OpenedByWork => current.round == 1
+      | Requested(request) =>
+          current.round > 1
+          and request.generation > 0
+          and request.evidence > 0
+    }
+
   pure def invariant(current: EvaluationInstance): bool =
     current.workCycle > 0
+    and current.round > 0
+    and originValid(current)
     and current.input.ticket > 0
     and current.input.workResult > 0
     and current.input.acceptedSourceRef > 0
     and planValid(current.plan)
-
     and stateHistoryInvariant(current)
 }

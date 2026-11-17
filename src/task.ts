@@ -4,6 +4,9 @@ export const TicketId = (value: number): TicketId => value as TicketId;
 export type CycleNumber = number & { readonly __brand: "CycleNumber" };
 export const CycleNumber = (value: number): CycleNumber => value as CycleNumber;
 
+export type Round = number & { readonly __brand: "Round" };
+export const Round = (value: number): Round => value as Round;
+
 export type StageKey = number & { readonly __brand: "StageKey" };
 export const StageKey = (value: number): StageKey => value as StageKey;
 
@@ -36,6 +39,7 @@ export class EvaluationTaskId {
   constructor(
     readonly ticket: TicketId,
     readonly work_cycle: CycleNumber,
+    readonly round: Round,
     readonly stage: StageKey,
     readonly generation: Generation,
     readonly evaluator: EvaluatorKey,
@@ -161,6 +165,7 @@ function validate_WorkTaskId(v: WorkTaskId): void {
 function validate_EvaluationTaskId(v: EvaluationTaskId): void {
   positive(v.ticket, "evaluation task ticket must be positive");
   positive(v.work_cycle, "work cycle must be positive");
+  positive(v.round, "round must be positive");
   positive(v.stage, "stage key must be positive");
   positive(v.generation, "generation must be positive");
   positive(v.evaluator, "evaluator key must be positive");

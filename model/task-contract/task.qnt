@@ -4,6 +4,7 @@ module task_contract {
   type EvaluationTaskIdentity = {
     ticket: int,
     workCycle: int,
+    round: int,
     stage: int,
     generation: int,
     evaluator: int
@@ -48,6 +49,7 @@ module task_contract {
     | EvaluationTask(identity) =>
         identity.ticket > 0
         and identity.workCycle > 0
+        and identity.round > 0
         and identity.stage > 0
         and identity.generation > 0
         and identity.evaluator > 0

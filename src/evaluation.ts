@@ -5,6 +5,7 @@ import {
   EvaluationTaskId,
   EvaluatorKey,
   Generation,
+  Round,
   StageKey,
   TaskDefinition,
   TaskId,
@@ -190,10 +191,31 @@ export class EvaluationBlocked {
 export type EvaluationState =
   Running | EvaluationPassed | EvaluationFailed | EvaluationBlocked;
 
+export class OpenedByWork {
+  readonly kind = "OpenedByWork";
+  constructor() {
+    Object.freeze(this);
+  }
+}
+
+export class Requested {
+  readonly kind = "Requested";
+  constructor(
+    readonly generation: Generation,
+    readonly evidence: ContentRef,
+  ) {
+    Object.freeze(this);
+  }
+}
+
+export type EvaluationOrigin = OpenedByWork | Requested;
+
 export class EvaluationInstance {
   readonly kind = "EvaluationInstance";
   constructor(
     readonly work_cycle: CycleNumber,
+    readonly round: Round,
+    readonly origin: EvaluationOrigin,
     readonly input: EvaluationInput,
     readonly plan: EvaluationPlan,
     readonly state: EvaluationState,
@@ -212,11 +234,19 @@ function validate_StageRun(v: StageRun): void {
 export function evaluator_task_id(
   ticket: TicketId,
   work_cycle: CycleNumber,
+  round: Round,
   stage: StageKey,
   generation: Generation,
   evaluator: EvaluatorKey,
 ): TaskId {
-  return new EvaluationTaskId(ticket, work_cycle, stage, generation, evaluator);
+  return new EvaluationTaskId(
+    ticket,
+    work_cycle,
+    round,
+    stage,
+    generation,
+    evaluator,
+  );
 }
 export function task_id_for(
   current: EvaluationInstance,
@@ -226,6 +256,7 @@ export function task_id_for(
   return evaluator_task_id(
     current.input.ticket,
     current.work_cycle,
+    current.round,
     current.plan.stages[progress.stage_index]!.key,
     progress.generation,
     evaluator,
@@ -294,7 +325,14 @@ function with_state(
   c: EvaluationInstance,
   state: EvaluationState,
 ): EvaluationInstance {
-  return new EvaluationInstance(c.work_cycle, c.input, c.plan, state);
+  return new EvaluationInstance(
+    c.work_cycle,
+    c.round,
+    c.origin,
+    c.input,
+    c.plan,
+    state,
+  );
 }
 function _with_status(
   c: EvaluationInstance,
@@ -508,6 +546,8 @@ export function state_history_invariant(c: EvaluationInstance): boolean {
 }
 export function begin(
   work_cycle: CycleNumber,
+  round: Round,
+  origin: EvaluationOrigin,
   input: EvaluationInput,
   plan: EvaluationPlan,
 ): EvaluationInstance {
@@ -515,6 +555,8 @@ export function begin(
     throw new Error("an evaluation plan has at least one stage");
   return new EvaluationInstance(
     work_cycle,
+    round,
+    origin,
     input,
     plan,
     new Running(
@@ -541,9 +583,16 @@ export function plan_valid(plan: EvaluationPlan): boolean {
     )
   );
 }
+export function origin_valid(c: EvaluationInstance): boolean {
+  return c.origin instanceof OpenedByWork
+    ? c.round === 1
+    : c.round > 1 && c.origin.generation > 0 && c.origin.evidence > 0;
+}
 export function evaluation_invariant(c: EvaluationInstance): boolean {
   return (
     c.work_cycle > 0 &&
+    c.round > 0 &&
+    origin_valid(c) &&
     c.input.ticket > 0 &&
     c.input.work_result > 0 &&
     c.input.accepted_source_ref > 0 &&
