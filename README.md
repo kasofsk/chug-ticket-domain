@@ -131,7 +131,7 @@ The traces are generated artifacts. Don't edit them by hand.
 ## Install and use
 
 ```sh
-npm i github:kasofsk/chug-ticket-domain#v0.7.0
+npm i github:kasofsk/chug-ticket-domain#v0.8.0
 ```
 
 `dist/` isn't committed. The `prepare` script builds it at install time.
