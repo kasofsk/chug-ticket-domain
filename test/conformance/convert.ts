@@ -88,7 +88,7 @@ import {
   InitialWork,
   EvaluationRework,
   FinalizationRework,
-  StackInvalidated,
+  EvaluationInvalidated,
   WorkCause,
   WorkInput,
   WorkExecution,
@@ -466,10 +466,10 @@ function parse_FinalizationRework(v: Value): FinalizationRework {
   const payload = v.value;
   return new FinalizationRework(parse_ContentRef(payload));
 }
-function parse_StackInvalidated(v: Value): StackInvalidated {
-  if (!(v instanceof Variant) || v.tag !== "StackInvalidated")
-    throw new ConversionError("expected StackInvalidated variant");
-  return new StackInvalidated(parse_ContentRef(v.value));
+function parse_EvaluationInvalidated(v: Value): EvaluationInvalidated {
+  if (!(v instanceof Variant) || v.tag !== "EvaluationInvalidated")
+    throw new ConversionError("expected EvaluationInvalidated variant");
+  return new EvaluationInvalidated(parse_ContentRef(v.value));
 }
 function parse_WorkInput(v: Value): WorkInput {
   const r = record(v, ["released", "cause", "retryEvidence"]);
@@ -1287,8 +1287,8 @@ function parse_WorkCause(v: Value): WorkCause {
       return parse_EvaluationRework(v);
     case "FinalizationRework":
       return parse_FinalizationRework(v);
-    case "StackInvalidated":
-      return parse_StackInvalidated(v);
+    case "EvaluationInvalidated":
+      return parse_EvaluationInvalidated(v);
     default:
       throw new ConversionError(`unknown WorkCause tag '${v.tag}'`);
   }

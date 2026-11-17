@@ -8,7 +8,7 @@ module ticket_domain {
     InitialWork
     | EvaluationRework(List[EvaluationReworkEntry])
     | FinalizationRework(int)
-    | StackInvalidated(int)
+    | EvaluationInvalidated(int)
 
   type WorkInput = {
     released: ReleasedContent,
@@ -456,7 +456,7 @@ module ticket_domain {
     evidence: int,
   ): WorkInput = {
     released: definition.content,
-    cause: StackInvalidated(evidence),
+    cause: EvaluationInvalidated(evidence),
     retryEvidence: [],
   }
 
@@ -1701,7 +1701,7 @@ module ticket_domain {
             entries[index].evaluator > 0
             and entries[index].resultRef > 0)
       | FinalizationRework(evidence) => evidence > 0
-      | StackInvalidated(evidence) => evidence > 0
+      | EvaluationInvalidated(evidence) => evidence > 0
     }
 
   pure def workInputMatchesTicket(

@@ -267,7 +267,7 @@ test("invalidating an evaluation restarts work from the accepted source", () => 
   if (!(state instanceof k.Work)) throw new Error("not in work");
   expect(state.execution.source).toBe(t.ContentRef(991));
   expect(state.execution.input.cause).toEqual(
-    new k.StackInvalidated(t.ContentRef(511)),
+    new k.EvaluationInvalidated(t.ContentRef(511)),
   );
   expect(driver.submit(invalidate(1, 512))).toEqual(refused(1));
   expect(k.graph_invariant(driver.graph)).toBe(true);
@@ -306,7 +306,7 @@ test("a blocked evaluation escalation can be invalidated, a failure one cannot",
   if (!(state instanceof k.Work)) throw new Error("not in work");
   expect(state.execution.source).toBe(t.ContentRef(991));
   expect(state.execution.input.cause).toEqual(
-    new k.StackInvalidated(t.ContentRef(521)),
+    new k.EvaluationInvalidated(t.ContentRef(521)),
   );
   const failed = evaluating();
   failed.submit(
@@ -357,7 +357,7 @@ test("work that fails after an invalidation resumes with the same cause", () => 
   const state = state_of(driver);
   if (!(state instanceof k.Work)) throw new Error("not in work");
   expect(state.execution.input.cause).toEqual(
-    new k.StackInvalidated(t.ContentRef(511)),
+    new k.EvaluationInvalidated(t.ContentRef(511)),
   );
   expect(state.execution.input.retry_evidence).toEqual([t.ContentRef(521)]);
   expect(k.graph_invariant(driver.graph)).toBe(true);
@@ -499,7 +499,7 @@ test("a failed verdict that stands is disposed by the failure policy", () => {
   const restarted = state_of(invalidated);
   if (!(restarted instanceof k.Work)) throw new Error("not in work");
   expect(restarted.execution.input.cause).toEqual(
-    new k.StackInvalidated(t.ContentRef(630)),
+    new k.EvaluationInvalidated(t.ContentRef(630)),
   );
   for (const d of [reworked, escalated, invalidated])
     expect(k.graph_invariant(d.graph)).toBe(true);

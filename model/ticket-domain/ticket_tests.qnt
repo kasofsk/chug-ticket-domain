@@ -347,7 +347,7 @@ module ticket_tests {
 
   def workInvalidatedWith(ticketId: int, evidence: int): bool =
     match graph.tickets.get(ticketId).state {
-      | Work(work) => work.input.cause == StackInvalidated(evidence)
+      | Work(work) => work.input.cause == EvaluationInvalidated(evidence)
       | _ => false
     }
 

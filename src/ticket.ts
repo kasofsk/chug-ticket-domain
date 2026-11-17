@@ -64,15 +64,15 @@ export class FinalizationRework {
   }
 }
 
-export class StackInvalidated {
-  readonly kind = "StackInvalidated";
+export class EvaluationInvalidated {
+  readonly kind = "EvaluationInvalidated";
   constructor(readonly evidence: ContentRef) {
     Object.freeze(this);
   }
 }
 
 export type WorkCause =
-  InitialWork | EvaluationRework | FinalizationRework | StackInvalidated;
+  InitialWork | EvaluationRework | FinalizationRework | EvaluationInvalidated;
 
 export class WorkInput {
   readonly kind = "WorkInput";
@@ -1163,7 +1163,7 @@ export function invalidated_work_input(
   d: ReleasedTicket,
   e: ContentRef,
 ): WorkInput {
-  return new WorkInput(d.content, new StackInvalidated(e), []);
+  return new WorkInput(d.content, new EvaluationInvalidated(e), []);
 }
 export function finalization_rework_input(
   d: ReleasedTicket,
